@@ -231,6 +231,75 @@ function icsDialog(pre){
   dlg.showModal();
 }
 
+/* ========== Brief-Generator (Mieterhöhung / Zahlungserinnerung) ========== */
+const MONATE=['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
+function monatName(ym){ const [y,m]=ym.split('-'); return MONATE[+m-1]+' '+y; }
+function anredeFor(mieter){
+  if(!mieter) return 'Sehr geehrte Damen und Herren,';
+  const m=mieter.replace(/\(.*?\)/g,'');
+  if(/&|und| u\. /.test(m) || /familie/i.test(m)) return 'Sehr geehrte Mieterinnen und Mieter,';
+  if(/^frau|^fr\./i.test(m.trim())) return 'Sehr geehrte '+m.trim()+',';
+  return 'Sehr geehrte/r '+m.trim()+',';
+}
+function absenderFor(o){
+  return /eGbR|GbR/i.test(o.eigentuemer||'') ? (o.eigentuemer.replace(/ \(.*\)/,'')) : 'Christian Specht';
+}
+function endeMonatPlus(n){ const t=today(); return new Date(t.getFullYear(), t.getMonth()+n+1, 0); }
+function ersterMonatPlus(n){ const t=today(); return new Date(t.getFullYear(), t.getMonth()+n, 1); }
+const DFMT=d=>d.toLocaleDateString('de-DE');
+function briefErhoehung(o,e){
+  const ms=mietspiegelOf(o.ort), c=mietCheck(o,e);
+  const neu=Math.round(e.kaltmiete + (c.potenzial||0)) || Math.round((ms?.wert||0)*(e.flaeche||0));
+  const diff=neu-e.kaltmiete;
+  const zustimmung=endeMonatPlus(2), wirksam=ersterMonatPlus(3);
+  const gesamtNeu=neu+(e.nk||0)+(e.hk||0);
+  if(e.gewerbe||e.mietart==='gewerbe'){
+    return `${absenderFor(o)}\n\n${e.mieter||'[Mieter]'}\n${o.adresse} – ${e.bezeichnung}\n\nAnpassung der Miete – ${e.bezeichnung}, ${o.adresse}\n\n${anredeFor(e.mieter)}\n\nbezugnehmend auf die Regelungen unseres Mietvertrags möchten wir die monatliche Nettomiete von derzeit ${EUR2(e.kaltmiete)} zum ${DFMT(wirksam)} auf ${EUR2(neu)} anpassen. [Vertragliche Grundlage hier einsetzen: Staffel/Index/Optionsregelung.]\n\nDie Nebenkostenvorauszahlungen bleiben unverändert.\n\nBitte bestätigen Sie uns die Anpassung kurz schriftlich.\n\nMit freundlichen Grüßen\n${absenderFor(o)}`;
+  }
+  if(e.mietart==='index'){
+    const basis=e.letzte_erhoehung?D(e.letzte_erhoehung.datum):(e.mietbeginn?D(e.mietbeginn):'[Datum]');
+    return `${absenderFor(o)}\n\n${e.mieter||'[Mieter]'}\n${o.adresse} – ${e.bezeichnung}\n\nAnpassung der Indexmiete gemäß § 557b BGB – ${e.bezeichnung}, ${o.adresse}\n\n${anredeFor(e.mieter)}\n\nin Ihrem Mietvertrag ist eine Indexmiete gemäß § 557b BGB vereinbart. Die Miete ist an den Verbraucherpreisindex (VPI) des Statistischen Bundesamtes gekoppelt.\n\nSeit der letzten Mietfestsetzung am ${basis} hat sich der VPI wie folgt entwickelt:\n- VPI alt (${basis}): [Indexstand alt] Punkte\n- VPI aktuell: [Indexstand neu] Punkte\n- Veränderung: [+X,X] %\n\nEntsprechend erhöht sich die monatliche Nettokaltmiete von derzeit ${EUR2(e.kaltmiete)} um [X,XX] € auf [neuer Betrag] € mit Wirkung ab dem ${DFMT(ersterMonatPlus(2))} (Beginn des übernächsten Monats nach Zugang dieser Erklärung, § 557b Abs. 3 BGB). Die Vorauszahlungen für Nebenkosten bleiben unverändert.\n\nDie aktuellen Indexstände finden Sie unter www.destatis.de.\n\nMit freundlichen Grüßen\n${absenderFor(o)}\n\n[Hinweis für dich: VPI-Stände unter destatis.de nachschlagen und die Platzhalter ersetzen. Frühestens 12 Monate nach letzter Anpassung zulässig.]`;
+  }
+  if(diff<=0){
+    const vorschlag=ms&&e.flaeche?Math.round(ms.wert*e.flaeche):null;
+    const zielV=vorschlag&&vorschlag>e.kaltmiete?vorschlag:'[neuer Betrag]';
+    const zielG=typeof zielV==='number'?EUR2(zielV+(e.nk||0)+(e.hk||0)):'[Gesamtmiete]';
+    return `${absenderFor(o)}\n\n${e.mieter||'[Mieter]'}\n${o.adresse} – ${e.bezeichnung}\n\nVorschlag zur einvernehmlichen Anpassung der Miete – ${e.bezeichnung}, ${o.adresse}\n\n${anredeFor(e.mieter)}\n\ndie monatliche Nettokaltmiete für die von Ihnen gemietete Wohnung (ca. ${e.flaeche||'[Fläche]'} m²) beträgt derzeit ${EUR2(e.kaltmiete)}${c.qm?` (${QM(c.qm)})`:''}. Die ortsübliche Vergleichsmiete in ${o.ort} liegt bei ca. ${ms?QM(ms.wert):'[Wert]'}.\n\nWir schlagen Ihnen eine einvernehmliche Anpassung der Nettokaltmiete auf ${typeof zielV==='number'?EUR2(zielV):zielV} mit Wirkung ab dem ${DFMT(ersterMonatPlus(2))} vor (Vereinbarung gemäß § 557 Abs. 1 BGB). Die Vorauszahlungen für Betriebs- und Heizkosten bleiben unverändert; die monatliche Gesamtmiete beträgt dann ${zielG}.\n\nMit dieser Vereinbarung besteht für beide Seiten Planungssicherheit. Wenn Sie einverstanden sind, bestätigen Sie uns dies bitte durch Unterschrift auf der Kopie dieses Schreibens. Gern besprechen wir den Vorschlag auch persönlich.\n\nMit freundlichen Grüßen\n${absenderFor(o)}\n\n________________________\nEinverstanden (Datum, Unterschrift Mieter)\n\n[Hinweis für dich: Eine förmliche Erhöhung nach § 558 BGB ist aktuell durch die Kappungsgrenze/Sperrfrist blockiert – daher einvernehmlicher Weg. Der Mieter muss nicht zustimmen. Betrag vor Versand anpassen. Keine Rechtsberatung.]`;
+  }
+  return `${absenderFor(o)}\n\n${e.mieter||'[Mieter]'}\n${o.adresse} – ${e.bezeichnung}\n\nMieterhöhungsverlangen gemäß § 558 BGB – ${e.bezeichnung}, ${o.adresse}\n\n${anredeFor(e.mieter)}\n\ndie monatliche Nettokaltmiete für die von Ihnen gemietete Wohnung (ca. ${e.flaeche||'[Fläche]'} m²) beträgt derzeit ${EUR2(e.kaltmiete)}${c.qm?` (${QM(c.qm)})`:''}. Die ortsübliche Vergleichsmiete in ${o.ort} liegt bei ca. ${ms?QM(ms.wert):'[Wert]'}${ms?` (Quelle: ${ms.quelle.split('(')[0].trim()})`:''}.\n\nWir bitten Sie hiermit um Ihre Zustimmung zur Erhöhung der monatlichen Nettokaltmiete von ${EUR2(e.kaltmiete)} um ${EUR2(diff)} auf ${EUR2(neu)} mit Wirkung ab dem ${DFMT(wirksam)}.\n\nDie Erhöhung wahrt die Kappungsgrenze von ${ms?ms.kappung:20} % innerhalb von drei Jahren (§ 558 Abs. 3 BGB); die letzte Mieterhöhung liegt mehr als zwölf Monate zurück (§ 558 Abs. 1 BGB). Die Vorauszahlungen für Betriebs- und Heizkosten bleiben unverändert, sodass die monatliche Gesamtmiete künftig ${EUR2(gesamtNeu)} beträgt.\n\nBitte erteilen Sie uns Ihre Zustimmung bis zum ${DFMT(zustimmung)} (§ 558b Abs. 2 BGB), z. B. durch kurze schriftliche Bestätigung oder Unterschrift auf der Kopie dieses Schreibens.\n\nFür Rückfragen stehen wir gern zur Verfügung.\n\nMit freundlichen Grüßen\n${absenderFor(o)}\n\n________________________\nZustimmung des Mieters / der Mieter (Datum, Unterschrift)\n\n[Hinweis für dich: Betrag und Wirkdatum vor Versand prüfen. Bei Portal-Vergleichswerten ohne offiziellen Mietspiegel ist die Begründung angreifbar – ggf. drei Vergleichswohnungen benennen oder einvernehmliche Anpassung vereinbaren. Keine Rechtsberatung.]`;
+}
+function offeneMonate(o,e){
+  const perOf=p=>p.monat||p.datum?.slice(0,7);
+  const credits=PAYMENTS.filter(p=>p.betrag>0);
+  const months=[...new Set(credits.map(perOf).filter(Boolean))].sort();
+  const beginn=e.mietbeginn?e.mietbeginn.slice(0,7):null;
+  const soll=warm(e);
+  const out=[];
+  for(const m of months){
+    if(beginn && m<beginn) continue;
+    const ist=credits.filter(p=>perOf(p)===m && matchPayment(p)===e.id).reduce((s,p)=>s+p.betrag,0);
+    if(ist+0.01<soll) out.push({monat:m, soll, ist, offen:Math.round((soll-ist)*100)/100});
+  }
+  return out;
+}
+function briefMahnung(o,e){
+  const off=offeneMonate(o,e);
+  const gesamt=off.reduce((s,x)=>s+x.offen,0);
+  const konto=(DATA.meta?.konten||[]).find(k=>k.iban===o.mietkonto);
+  const ibanFmt=(o.mietkonto||'[IBAN]').replace(/(.{4})/g,'$1 ').trim();
+  const frist=new Date(today().getTime()+7*864e5);
+  const liste=off.map(x=>`- ${monatName(x.monat)}: offen ${EUR2(x.offen)} (Soll ${EUR2(x.soll)}, eingegangen ${EUR2(x.ist)})`).join('\n');
+  const eskalation = gesamt >= 2*warm(e)-1 ?
+`\n\nWir weisen darauf hin, dass Sie sich mit den genannten Beträgen in Zahlungsverzug befinden (§ 286 BGB). Bei einem Rückstand in Höhe von zwei Monatsmieten sind wir berechtigt, das Mietverhältnis fristlos zu kündigen (§ 543 Abs. 2 Nr. 3 BGB). Wir möchten diesen Schritt vermeiden – bitte nehmen Sie bei Zahlungsschwierigkeiten kurzfristig Kontakt mit uns auf.` :
+(off.length>1?`\n\nSie befinden sich mit den genannten Beträgen in Zahlungsverzug (§ 286 BGB). Bitte gleichen Sie den Rückstand zeitnah aus.`:'');
+  return `${absenderFor(o)}\n\n${e.mieter||'[Mieter]'}\n${o.adresse} – ${e.bezeichnung}\n\nZahlungserinnerung – Miete ${off.length===1?monatName(off[0].monat):'(mehrere Monate)'} – ${e.bezeichnung}, ${o.adresse}\n\n${anredeFor(e.mieter)}\n\nbei der Durchsicht unserer Kontoeingänge haben wir festgestellt, dass für die von Ihnen gemietete Einheit folgende Mietzahlungen noch nicht bzw. nicht vollständig eingegangen sind:\n\n${liste||'- [keine offenen Monate in den importierten Umsätzen gefunden – bitte prüfen]'}\n\nOffener Gesamtbetrag: ${EUR2(gesamt)}\n\nBitte überweisen Sie den offenen Betrag bis zum ${DFMT(frist)} auf folgendes Konto:\n\nKontoinhaber: ${konto?konto.name.split('–')[0].trim():absenderFor(o)}\nIBAN: ${ibanFmt}${konto?`\nBank: ${konto.bank}`:''}\nVerwendungszweck: Miete ${e.bezeichnung}, ${off.map(x=>monatName(x.monat)).join(' + ')}\n\nSollte sich Ihre Zahlung mit diesem Schreiben überschnitten haben, betrachten Sie es bitte als gegenstandslos.${eskalation}\n\nMit freundlichen Grüßen\n${absenderFor(o)}`;
+}
+function textDialog(titel, text){
+  document.getElementById('txtT').textContent=titel;
+  document.getElementById('txtA').value=text;
+  document.getElementById('txtDlg').showModal();
+}
+
 /* ========== Router ========== */
 let VIEW='dash', DETAIL=null;
 document.querySelectorAll('nav button').forEach(b=>b.addEventListener('click',()=>{
@@ -252,6 +321,13 @@ function render(){
   m.querySelectorAll('[data-back]').forEach(el=>el.addEventListener('click',()=>{DETAIL=null;render();}));
   m.querySelectorAll('[data-ics]').forEach(el=>el.addEventListener('click',ev=>{ev.stopPropagation();icsDialog(JSON.parse(el.dataset.ics));}));
   m.querySelectorAll('[data-icsdirect]').forEach(el=>el.addEventListener('click',ev=>{ev.stopPropagation();const p=JSON.parse(el.dataset.icsdirect);downloadICS(p.titel,p.datum,p.notiz);}));
+  m.querySelectorAll('[data-brief]').forEach(el=>el.addEventListener('click',ev=>{
+    ev.stopPropagation();
+    const b=JSON.parse(el.dataset.brief);
+    const u=unitById(b.id); if(!u) return;
+    if(b.kind==='erh') textDialog('Mieterhöhung: '+u.e.bezeichnung, briefErhoehung(u.o,u.e));
+    else textDialog('Zahlungserinnerung: '+u.e.bezeichnung, briefMahnung(u.o,u.e));
+  }));
 }
 
 /* ========== Daten laden ========== */
@@ -346,7 +422,8 @@ function viewObjektDetail(id){
     <td>${D(e.mietbeginn)}</td>
     <td>${e.letzte_erhoehung?D(e.letzte_erhoehung.datum)+`<br><span class="mut">${EUR(e.letzte_erhoehung.alt)} → ${EUR(e.letzte_erhoehung.neu)}</span>`:'–'}</td>
     <td><span class="badge b-${c.ampel}">${esc(c.status)}</span>${c.potenzial?`<br><span class="mut">+${EUR(c.potenzial)} mögl.</span>`:''}</td>
-    <td><button class="btn small" data-ics='${JSON.stringify(remind).replace(/'/g,"&#39;")}'>⏰ .ics</button></td></tr>`;
+    <td style="white-space:nowrap"><button class="btn small" data-ics='${JSON.stringify(remind).replace(/'/g,"&#39;")}'>⏰</button>
+    <button class="btn small" title="Mieterhöhungs-Schreiben erstellen" data-brief='{"kind":"erh","id":"${e.id}"}'>✉ Erhöhung</button></td></tr>`;
   }).join('');
   return `<span class="backlink" data-back>← alle Objekte</span>
   <h2>${esc(o.name)}</h2><p class="sub">${esc(o.adresse)} · ${esc(o.typ||'')} · Eigentümer: ${esc(o.eigentuemer||'–')}</p>
@@ -380,7 +457,8 @@ function viewMiet(){
     <td><span class="badge b-${c.ampel}">${esc(c.status)}</span></td>
     <td class="num">${c.potenzial?'+'+EUR(c.potenzial):'–'}</td>
     <td>${frei?(frei<=today()?'<span class="badge b-good">sofort</span>':frei.toLocaleDateString('de-DE')):'–'}</td>
-    <td>${remind?`<button class="btn small" data-ics='${JSON.stringify(remind).replace(/'/g,"&#39;")}'>⏰</button>`:''}</td></tr>
+    <td style="white-space:nowrap">${remind?`<button class="btn small" data-ics='${JSON.stringify(remind).replace(/'/g,"&#39;")}'>⏰</button>`:''}
+    ${!e.gewerbe?`<button class="btn small" title="Erhöhungs-Schreiben" data-brief='{"kind":"erh","id":"${e.id}"}'>✉</button>`:''}</td></tr>
     ${c.hinweis.length?`<tr><td colspan="7" class="note" style="padding-top:0">↳ ${esc(c.hinweis.join(' '))}</td></tr>`:''}`;
   }).join('');
   return `<h2>Mietspiegel-Check</h2>
@@ -415,24 +493,31 @@ function viewBank(){
       const uid = matchPayment(p);
       if(uid){ (matched[uid]=matched[uid]||[]).push(p); } else unmatched.push(p);
     });
+    let sumSoll=0,sumIst=0,sumOffen=0;
     const rows = allUnits().filter(({e})=>e.mieter).map(({o,e})=>{
       const soll = warm(e);
       const pays = matched[e.id]||[];
       const ist = pays.reduce((s,p)=>s+p.betrag,0);
+      const offen = Math.max(0, Math.round((soll-ist)*100)/100);
+      sumSoll+=soll; sumIst+=ist; sumOffen+=offen;
       const st = ist<=0?'bad':(ist+1<soll?'warn':'good');
       const stT = ist<=0?'offen':(ist+1<soll?'Teilzahlung':'bezahlt');
       return `<tr><td><b>${esc(e.bezeichnung)}</b><br><span class="mut">${esc(o.name)} · ${esc(e.mieter)}</span></td>
       <td class="num">${EUR2(soll)}</td>
       <td class="num">${ist?EUR2(ist):'–'}${pays.length?`<br><span class="mut">${pays.map(p=>D(p.datum)).join(', ')}</span>`:''}</td>
-      <td><span class="badge b-${st}">${stT}</span></td></tr>`;
+      <td class="num">${offen>0.005?`<b style="color:var(--bad)">${EUR2(offen)}</b>`:'–'}</td>
+      <td><span class="badge b-${st}">${stT}</span></td>
+      <td>${offen>0.005?`<button class="btn small" title="Zahlungserinnerung verfassen" data-brief='{"kind":"mahn","id":"${e.id}"}'>✉ Erinnerung</button>`:''}</td></tr>`;
     }).join('');
+    const foot=`<tr style="border-top:2px solid var(--border-strong)"><td><b>Summe</b></td><td class="num"><b>${EUR2(sumSoll)}</b></td><td class="num"><b>${EUR2(sumIst)}</b></td><td class="num"><b style="color:${sumOffen>0.005?'var(--bad)':'var(--good)'}">${EUR2(sumOffen)}</b></td><td colspan="2"></td></tr>`;
     const um = unmatched.map((p,i)=>`<tr><td class="mono">${D(p.datum)}</td><td>${esc(p.name||'')}<br><span class="mut mono">${esc(p.iban||'')}</span></td>
       <td class="note">${esc((p.zweck||'').slice(0,90))}</td><td class="num">${EUR2(p.betrag)}</td>
       <td><select data-assign="${esc(p.key)}"><option value="">– zuordnen –</option>
       ${allUnits().map(({o,e})=>`<option value="${e.id}">${esc(e.bezeichnung)} (${esc(e.mieter||'leer')})</option>`).join('')}</select></td></tr>`).join('');
     body = `<div class="pill-tabs">${months.map(m=>`<button class="${m===sel?'active':''}" data-month="${m}">${m.slice(5)}/${m.slice(0,4)}</button>`).join('')}</div>
     <div class="card"><h3>Soll/Ist ${sel.slice(5)}/${sel.slice(0,4)}</h3>
-    <div style="overflow-x:auto"><table><thead><tr><th>Einheit / Mieter</th><th class="num">Soll (warm)</th><th class="num">Eingegangen</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table></div></div>
+    <div style="overflow-x:auto"><table><thead><tr><th>Einheit / Mieter</th><th class="num">Soll (warm)</th><th class="num">Eingegangen</th><th class="num">Offen</th><th>Status</th><th></th></tr></thead><tbody>${rows}${foot}</tbody></table></div>
+    <p class="note" style="margin-top:8px">„Offen" = Soll minus Eingang im gewählten Monat. Die Zahlungserinnerung fasst automatisch alle offenen Monate des Mieters zusammen. Hinweis: Braustraße 8 (bis 07/2026) und Schubertweg laufen über nicht importierte Konten.</p></div>
     ${unmatched.length?`<div class="card"><h3>Nicht zugeordnete Eingänge (${unmatched.length})</h3>
     <div style="overflow-x:auto"><table><thead><tr><th>Datum</th><th>Absender</th><th>Verwendungszweck</th><th class="num">Betrag</th><th>Zuordnung</th></tr></thead><tbody>${um}</tbody></table></div>
     <p class="note">Eine manuelle Zuordnung wird gespeichert – künftige Zahlungen mit derselben IBAN/demselben Namen werden automatisch erkannt.</p></div>`:''}`;
@@ -718,6 +803,22 @@ document.addEventListener('DOMContentLoaded',()=>{
     <button class="btn" id="icsCancel">Abbrechen</button>
     <button class="btn primary" id="icsOk">.ics herunterladen</button></div>`;
   document.body.appendChild(dlg);
+  const tdlg=document.createElement('dialog');
+  tdlg.id='txtDlg'; tdlg.style.width='min(680px,94vw)';
+  tdlg.innerHTML=`<h3 id="txtT" style="margin:0 0 10px">Schreiben</h3>
+  <textarea id="txtA" rows="20" style="font-size:13px;line-height:1.5"></textarea>
+  <div class="btnrow" style="margin-top:12px;justify-content:space-between">
+    <span class="note" id="txtHint">Text vor dem Versand prüfen und anpassen.</span>
+    <span><button class="btn" id="txtClose">Schließen</button>
+    <button class="btn primary" id="txtCopy">📋 Kopieren</button></span></div>`;
+  document.body.appendChild(tdlg);
+  document.getElementById('txtClose').addEventListener('click',()=>tdlg.close());
+  document.getElementById('txtCopy').addEventListener('click',async()=>{
+    const ta=document.getElementById('txtA');
+    try{ await navigator.clipboard.writeText(ta.value); }
+    catch(e){ ta.select(); document.execCommand('copy'); }
+    const b=document.getElementById('txtCopy'); b.textContent='✓ Kopiert'; setTimeout(()=>b.textContent='📋 Kopieren',1500);
+  });
   document.getElementById('icsCancel').addEventListener('click',()=>dlg.close());
   document.getElementById('icsOk').addEventListener('click',()=>{
     const t=document.getElementById('icsT').value.trim()||'Erinnerung';
