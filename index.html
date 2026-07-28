@@ -1,0 +1,686 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Immobilien-Cockpit · Specht</title>
+<style>
+:root{
+  color-scheme: light;
+  --surface:#fcfcfb; --card:#ffffff; --border:#e6e4df; --border-strong:#d1cfc8;
+  --ink:#0b0b0b; --ink-2:#52514e; --ink-3:#8a8880;
+  --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a;
+  --good:#008300; --warn:#b97e00; --warn-bg:#fdf3dd; --bad:#c43837; --bad-bg:#fbeaea; --good-bg:#e8f3e8; --info-bg:#e9f1fb;
+  --radius:10px; --shadow:0 1px 3px rgba(20,20,15,.07),0 1px 2px rgba(20,20,15,.05);
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:var(--surface);color:var(--ink);font-size:15px;line-height:1.45}
+a{color:var(--s1)}
+#app{display:flex;min-height:100vh}
+nav{width:220px;flex-shrink:0;background:#f4f3f0;border-right:1px solid var(--border);padding:18px 12px;position:sticky;top:0;height:100vh;overflow:auto}
+nav h1{font-size:17px;margin:2px 6px 18px;letter-spacing:-.2px}
+nav h1 small{display:block;font-size:11px;color:var(--ink-3);font-weight:500;margin-top:2px}
+nav button{display:flex;align-items:center;gap:9px;width:100%;text-align:left;padding:9px 10px;margin:2px 0;border:0;background:transparent;border-radius:8px;font-size:14px;color:var(--ink-2);cursor:pointer;font-family:inherit}
+nav button:hover{background:#eceae5}
+nav button.active{background:#fff;color:var(--ink);font-weight:600;box-shadow:var(--shadow)}
+nav .icon{width:20px;text-align:center;flex-shrink:0}
+main{flex:1;padding:26px 32px;max-width:1160px;min-width:0}
+h2{font-size:21px;margin:0 0 4px;letter-spacing:-.3px}
+.sub{color:var(--ink-2);margin:0 0 20px;font-size:13.5px}
+.grid{display:grid;gap:14px}
+.kpis{grid-template-columns:repeat(auto-fit,minmax(150px,1fr));margin-bottom:20px}
+.kpi{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:13px 15px;box-shadow:var(--shadow)}
+.kpi .l{font-size:12px;color:var(--ink-2);margin-bottom:3px}
+.kpi .v{font-size:21px;font-weight:650;letter-spacing:-.4px}
+.kpi .d{font-size:11.5px;color:var(--ink-3);margin-top:2px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:16px 18px;box-shadow:var(--shadow);margin-bottom:16px}
+.card h3{margin:0 0 10px;font-size:15.5px}
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+th{text-align:left;font-size:11.5px;text-transform:uppercase;letter-spacing:.4px;color:var(--ink-3);font-weight:600;padding:6px 8px;border-bottom:1px solid var(--border-strong)}
+td{padding:7px 8px;border-bottom:1px solid var(--border);vertical-align:top}
+tr:last-child td{border-bottom:0}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+.badge{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;padding:2px 9px;border-radius:99px;white-space:nowrap}
+.b-good{background:var(--good-bg);color:var(--good)}
+.b-warn{background:var(--warn-bg);color:var(--warn)}
+.b-bad{background:var(--bad-bg);color:var(--bad)}
+.b-info{background:var(--info-bg);color:var(--s1)}
+.b-mut{background:#f0efec;color:var(--ink-2)}
+.btn{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--border-strong);background:#fff;color:var(--ink);border-radius:8px;padding:6px 12px;font-size:13px;cursor:pointer;font-family:inherit;text-decoration:none}
+.btn:hover{background:#f6f5f2}
+.btn.primary{background:var(--s1);border-color:var(--s1);color:#fff}
+.btn.primary:hover{background:#256abf}
+.btn.small{padding:3px 9px;font-size:12px;border-radius:6px}
+.btnrow{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.obj-grid{grid-template-columns:repeat(auto-fill,minmax(320px,1fr))}
+.obj-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:16px;box-shadow:var(--shadow);cursor:pointer;transition:border-color .12s}
+.obj-card:hover{border-color:var(--s1)}
+.obj-card h3{margin:0 0 2px;font-size:15px}
+.obj-card .addr{font-size:12.5px;color:var(--ink-2);margin-bottom:10px}
+.obj-card .row{display:flex;justify-content:space-between;font-size:13px;padding:3px 0;color:var(--ink-2)}
+.obj-card .row b{color:var(--ink);font-variant-numeric:tabular-nums}
+.chart{margin-top:6px}
+.chart .crow{display:grid;grid-template-columns:180px 1fr;gap:10px;align-items:center;margin:7px 0}
+.chart .cl{font-size:12.5px;color:var(--ink-2);text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chart .bars{display:flex;flex-direction:column;gap:2px}
+.chart .bar{height:13px;border-radius:0 4px 4px 0;min-width:2px;position:relative}
+.chart .bar span{position:absolute;left:calc(100% + 6px);top:-1px;font-size:11px;color:var(--ink-2);font-variant-numeric:tabular-nums;white-space:nowrap}
+.legend{display:flex;gap:16px;font-size:12.5px;color:var(--ink-2);margin:4px 0 10px}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px}
+.alert{border-left:3px solid var(--bad);background:var(--bad-bg);padding:9px 12px;border-radius:0 8px 8px 0;margin:6px 0;font-size:13.5px}
+.alert.warn{border-color:var(--warn);background:var(--warn-bg)}
+.alert.info{border-color:var(--s1);background:var(--info-bg)}
+.note{font-size:12.5px;color:var(--ink-2)}
+.drop{border:2px dashed var(--border-strong);border-radius:var(--radius);padding:44px;text-align:center;color:var(--ink-2);cursor:pointer;background:var(--card)}
+.drop.over{border-color:var(--s1);background:var(--info-bg)}
+input[type=text],input[type=password],input[type=date],input[type=number],select,textarea{font-family:inherit;font-size:14px;padding:7px 10px;border:1px solid var(--border-strong);border-radius:8px;background:#fff;color:var(--ink);width:100%}
+textarea{resize:vertical}
+label{font-size:12.5px;font-weight:600;color:var(--ink-2);display:block;margin:10px 0 4px}
+.frow{display:flex;gap:12px}.frow>div{flex:1}
+.chat{display:flex;flex-direction:column;gap:12px}
+.msg{padding:11px 14px;border-radius:12px;max-width:85%;white-space:pre-wrap}
+.msg.user{background:var(--s1);color:#fff;align-self:flex-end;border-bottom-right-radius:4px}
+.msg.ai{background:var(--card);border:1px solid var(--border);align-self:flex-start;border-bottom-left-radius:4px;box-shadow:var(--shadow)}
+.msg.ai h4{margin:8px 0 4px}
+.chat-input{display:flex;gap:8px;margin-top:12px}
+.chat-input textarea{flex:1;min-height:44px}
+.pill-tabs{display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap}
+.pill-tabs button{border:1px solid var(--border-strong);background:#fff;border-radius:99px;padding:5px 14px;font-size:13px;cursor:pointer;font-family:inherit;color:var(--ink-2)}
+.pill-tabs button.active{background:var(--ink);color:#fff;border-color:var(--ink)}
+dialog{border:0;border-radius:14px;box-shadow:0 12px 40px rgba(0,0,0,.18);padding:22px;width:min(480px,92vw)}
+dialog::backdrop{background:rgba(10,10,8,.35)}
+.mut{color:var(--ink-3)}
+.right{text-align:right}
+.mono{font-variant-numeric:tabular-nums}
+.backlink{font-size:13px;margin-bottom:12px;display:inline-block;cursor:pointer;color:var(--s1)}
+@media(max-width:840px){#app{flex-direction:column}nav{width:100%;height:auto;position:static;display:flex;flex-wrap:wrap;gap:2px}nav h1{width:100%}nav button{width:auto}main{padding:16px}}
+@media print{nav{display:none}}
+</style>
+</head>
+<body>
+<div id="app">
+<nav>
+  <h1>Immobilien-Cockpit<small>Specht &amp; Waschkowski</small></h1>
+  <button data-v="dash" class="active"><span class="icon">◫</span>Übersicht</button>
+  <button data-v="objekte"><span class="icon">⌂</span>Objekte</button>
+  <button data-v="bank"><span class="icon">€</span>Bank &amp; Zahlungen</button>
+  <button data-v="miet"><span class="icon">↗</span>Mietspiegel-Check</button>
+  <button data-v="erinner"><span class="icon">⏰</span>Erinnerungen</button>
+  <button data-v="ki"><span class="icon">✦</span>KI-Fragen</button>
+  <button data-v="conf"><span class="icon">⚙</span>Einstellungen</button>
+</nav>
+<main id="main"></main>
+</div>
+<script>
+/* ========== Storage (mit Fallback, falls localStorage nicht verfügbar) ========== */
+const mem = {};
+const store = {
+  get(k){ try{ const v = localStorage.getItem(k); return v?JSON.parse(v):null; }catch(e){ return mem[k]||null; } },
+  set(k,v){ try{ localStorage.setItem(k,JSON.stringify(v)); }catch(e){ mem[k]=v; } },
+  del(k){ try{ localStorage.removeItem(k); }catch(e){ delete mem[k]; } }
+};
+let DATA = store.get('ic_data');
+let SETTINGS = store.get('ic_settings') || {apiKey:'', model:'claude-sonnet-4-5'};
+let ASSIGN = store.get('ic_assign') || {};      // iban/name-hash -> einheitId (manuelle Zuordnungen)
+let PAYMENTS = store.get('ic_payments') || [];   // importierte Umsätze
+
+/* ========== Helpers ========== */
+const EUR = n => n==null ? '–' : n.toLocaleString('de-DE',{minimumFractionDigits:0,maximumFractionDigits:0})+' €';
+const EUR2 = n => n==null ? '–' : n.toLocaleString('de-DE',{minimumFractionDigits:2,maximumFractionDigits:2})+' €';
+const QM = n => n==null ? '–' : n.toLocaleString('de-DE',{minimumFractionDigits:2,maximumFractionDigits:2})+' €/m²';
+const D = s => s ? new Date(s+ (s.length===7?'-01':'')).toLocaleDateString('de-DE',{day:s.length>7?'2-digit':undefined,month:'2-digit',year:'numeric'}) : '–';
+const esc = s => String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const norm = s => String(s||'').toLowerCase().replace(/[^a-z0-9äöüß ]/g,' ').replace(/\s+/g,' ').trim();
+const today = () => new Date();
+function addMonths(d, m){ const x=new Date(d); x.setMonth(x.getMonth()+m); return x; }
+function isoDate(d){ return d.toISOString().slice(0,10); }
+function allUnits(){ const u=[]; (DATA?.objekte||[]).forEach(o=>o.einheiten.forEach(e=>u.push({o,e}))); return u; }
+function unitById(id){ return allUnits().find(x=>x.e.id===id); }
+function warm(e){ return (e.kaltmiete||0)+(e.nk||0)+(e.hk||0); }
+function mietspiegelOf(ort){ return (DATA?.mietspiegel||[]).find(m=>m.ort===ort); }
+
+/* ========== Mietspiegel- & Erhöhungslogik (§558/§557b BGB, vereinfacht) ========== */
+function mietCheck(o, e){
+  const ms = mietspiegelOf(o.ort);
+  const r = {qm:null, status:'unbekannt', ampel:'mut', text:'', potenzial:0, naechsteErhoehung:null, hinweis:[]};
+  if(e.flaeche && e.kaltmiete){ r.qm = e.kaltmiete/e.flaeche; }
+  if(e.gewerbe || e.mietart==='gewerbe'){
+    r.status='Gewerbe'; r.ampel='mut'; r.text='Gewerbemiete – Erhöhung nur nach Vertrag (Staffel/Index/Option).';
+    return r;
+  }
+  if(!ms || r.qm==null){ r.text='Keine Vergleichsdaten.'; return r; }
+  const [lo,hi]=ms.spanne;
+  if(r.qm < lo){ r.status='deutlich unter Markt'; r.ampel='bad'; }
+  else if(r.qm < ms.wert){ r.status='unter Vergleichsmiete'; r.ampel='warn'; }
+  else if(r.qm <= hi){ r.status='marktgerecht'; r.ampel='good'; }
+  else { r.status='über Marktspanne'; r.ampel='info'; }
+  // Wartefrist §558: neues Erhöhungsverlangen frühestens 12 Monate nach letzter Erhöhung, wirksam +3 Monate = 15 Monate
+  const basisDatum = e.letzte_erhoehung ? new Date(e.letzte_erhoehung.datum) : (e.mietbeginn?new Date(e.mietbeginn):null);
+  if(e.mietart==='index'){
+    r.hinweis.push('Indexmietvertrag (§557b): Anpassung gemäß VPI, frühestens 12 Monate nach letzter Anpassung; §558/Mietspiegel nicht anwendbar.');
+    r.naechsteErhoehung = basisDatum ? addMonths(basisDatum,12) : null;
+  } else {
+    r.naechsteErhoehung = basisDatum ? addMonths(basisDatum,15) : null;
+    // Kappungsgrenze: max +kappung% in 3 Jahren (vereinfachte Basis: Miete vor letzter Erhöhung, falls <3 Jahre her, sonst aktuelle Miete)
+    const kapp = (ms.kappung||20)/100;
+    let basisMiete = e.kaltmiete;
+    if(e.letzte_erhoehung && (today()-new Date(e.letzte_erhoehung.datum)) < 3*365.25*864e5){ basisMiete = e.letzte_erhoehung.alt; }
+    const maxKappung = basisMiete*(1+kapp);
+    const ziel = Math.min(ms.wert*e.flaeche, maxKappung);
+    r.potenzial = Math.max(0, Math.round(ziel - e.kaltmiete));
+    if(r.potenzial>0){
+      r.hinweis.push(`Bis Vergleichsmiete (${QM(ms.wert)}) und Kappungsgrenze (${ms.kappung} %/3 J.) sind ca. +${EUR(r.potenzial)}/Monat möglich.`);
+    }
+    if(ziel===maxKappung && ms.wert*e.flaeche>maxKappung) r.hinweis.push('Kappungsgrenze limitiert – volle Vergleichsmiete erst in mehreren Schritten erreichbar.');
+  }
+  if(e.besonderheiten && /verzicht/i.test(e.besonderheiten)) r.hinweis.push('Achtung: vertraglicher Erhöhungsverzicht – siehe Besonderheiten.');
+  const fr = r.naechsteErhoehung;
+  r.text = `${r.status}. ${fr ? (fr<=today() ? 'Erhöhung ab sofort möglich.' : 'Nächste Erhöhung wirksam ab '+fr.toLocaleDateString('de-DE')+'.') : ''}`;
+  return r;
+}
+
+/* ========== Automatische Erinnerungsvorschläge ========== */
+function autoReminders(){
+  const list=[];
+  const t=today();
+  allUnits().forEach(({o,e})=>{
+    const c = mietCheck(o,e);
+    if(!e.gewerbe && c.potenzial>50 && c.naechsteErhoehung){
+      const d = c.naechsteErhoehung<t ? addMonths(t,0) : c.naechsteErhoehung;
+      list.push({titel:`Mieterhöhung prüfen: ${e.bezeichnung} (${e.mieter||'–'})`, datum:isoDate(addMonths(d,-2)), notiz:`${o.name} – Potenzial ca. +${c.potenzial} €/Monat. Wirksam frühestens ${d.toLocaleDateString('de-DE')}. Quelle Mietspiegel: ${mietspiegelOf(o.ort)?.quelle||''}`, kat:'Mieterhöhung'});
+    }
+    if(e.mietart==='index'){
+      const basis = e.letzte_erhoehung? new Date(e.letzte_erhoehung.datum) : (e.mietbeginn?new Date(e.mietbeginn):null);
+      if(basis) list.push({titel:`Indexanpassung prüfen: ${e.bezeichnung}`, datum:isoDate(addMonths(basis,12)), notiz:`${o.name} – VPI-Entwicklung seit ${basis.toLocaleDateString('de-DE')} prüfen (§557b).`, kat:'Indexmiete'});
+    }
+  });
+  (DATA?.objekte||[]).forEach(o=>{
+    if(o.finanzierung?.zinsbindung_ende){
+      list.push({titel:`Anschlussfinanzierung: ${o.name}`, datum:isoDate(addMonths(new Date(o.finanzierung.zinsbindung_ende),-12)), notiz:`Zinsbindung endet am ${D(o.finanzierung.zinsbindung_ende)} (${o.finanzierung.bank||''}). 12 Monate vorher Konditionen vergleichen.`, kat:'Finanzierung'});
+    }
+  });
+  // Betriebskostenabrechnung: Frist 31.12. für Vorjahr
+  const jahr = t.getFullYear();
+  list.push({titel:`Betriebskostenabrechnungen ${jahr-1} versenden (Frist 31.12.${jahr})`, datum:`${jahr}-10-01`, notiz:'Abrechnungsfrist §556 Abs. 3 BGB: 12 Monate nach Ende des Abrechnungszeitraums.', kat:'Nebenkosten'});
+  list.push({titel:'Braustraße 8: Mietkonto-Umstellung an alle Mieter kommunizieren', datum:'2026-08-03', notiz:'Nach Eigentumsübergang 01.08.2026 neue Bankverbindung mitteilen (bisher Konto Voreigentümer Burat & Neugeboren).', kat:'Verwaltung'});
+  return list.sort((a,b)=>a.datum.localeCompare(b.datum));
+}
+
+/* ========== ICS-Erstellung ========== */
+function makeICS(titel, datum, notiz){
+  const dt = datum.replace(/-/g,'');
+  const uid = 'ic-'+Math.abs([...titel+datum].reduce((a,c)=>a*31+c.charCodeAt(0)|0,7))+'@immobilien-cockpit';
+  const escT = s => String(s||'').replace(/\\/g,'\\\\').replace(/;/g,'\\;').replace(/,/g,'\\,').replace(/\n/g,'\\n');
+  const stamp = new Date().toISOString().replace(/[-:]/g,'').slice(0,15)+'Z';
+  return ['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Immobilien-Cockpit//DE','CALSCALE:GREGORIAN','BEGIN:VEVENT',
+    'UID:'+uid,'DTSTAMP:'+stamp,'DTSTART;VALUE=DATE:'+dt,'SUMMARY:'+escT(titel),'DESCRIPTION:'+escT(notiz),
+    'BEGIN:VALARM','TRIGGER:-P1D','ACTION:DISPLAY','DESCRIPTION:'+escT(titel),'END:VALARM',
+    'END:VEVENT','END:VCALENDAR'].join('\r\n');
+}
+function downloadICS(titel, datum, notiz){
+  const blob = new Blob([makeICS(titel,datum,notiz)],{type:'text/calendar'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+  a.download=titel.replace(/[^\wäöüß -]/gi,'').slice(0,60)+'.ics'; a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),5000);
+}
+function icsDialog(pre){
+  const dlg=document.getElementById('icsDlg');
+  document.getElementById('icsT').value=pre?.titel||'';
+  document.getElementById('icsD').value=pre?.datum||isoDate(today());
+  document.getElementById('icsN').value=pre?.notiz||'';
+  dlg.showModal();
+}
+
+/* ========== Router ========== */
+let VIEW='dash', DETAIL=null;
+document.querySelectorAll('nav button').forEach(b=>b.addEventListener('click',()=>{
+  VIEW=b.dataset.v; DETAIL=null;
+  document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('active',x===b));
+  render();
+}));
+function render(){
+  const m=document.getElementById('main');
+  if(!DATA){ m.innerHTML=viewNoData(); wireNoData(); return; }
+  if(VIEW==='dash') m.innerHTML=viewDash();
+  else if(VIEW==='objekte') m.innerHTML=DETAIL?viewObjektDetail(DETAIL):viewObjekte();
+  else if(VIEW==='bank'){ m.innerHTML=viewBank(); wireBank(); }
+  else if(VIEW==='miet') m.innerHTML=viewMiet();
+  else if(VIEW==='erinner') m.innerHTML=viewErinner();
+  else if(VIEW==='ki'){ m.innerHTML=viewKI(); wireKI(); }
+  else if(VIEW==='conf'){ m.innerHTML=viewConf(); wireConf(); }
+  m.querySelectorAll('[data-open]').forEach(el=>el.addEventListener('click',ev=>{ev.stopPropagation();DETAIL=el.dataset.open;VIEW='objekte';document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('active',x.dataset.v==='objekte'));render();}));
+  m.querySelectorAll('[data-back]').forEach(el=>el.addEventListener('click',()=>{DETAIL=null;render();}));
+  m.querySelectorAll('[data-ics]').forEach(el=>el.addEventListener('click',ev=>{ev.stopPropagation();icsDialog(JSON.parse(el.dataset.ics));}));
+  m.querySelectorAll('[data-icsdirect]').forEach(el=>el.addEventListener('click',ev=>{ev.stopPropagation();const p=JSON.parse(el.dataset.icsdirect);downloadICS(p.titel,p.datum,p.notiz);}));
+}
+
+/* ========== Daten laden ========== */
+function viewNoData(){
+  return `<h2>Willkommen im Immobilien-Cockpit</h2>
+  <p class="sub">Es sind noch keine Daten geladen. Die Objektdaten liegen aus Datenschutzgründen nicht auf GitHub, sondern bei dir lokal.</p>
+  <div class="drop" id="drop">Datei <b>immobilien-daten.json</b> hierher ziehen<br>oder klicken zum Auswählen
+  <input type="file" id="fileIn" accept=".json" style="display:none"></div>
+  <p class="note" style="margin-top:14px">Die Daten werden anschließend im Browser gespeichert (localStorage) – sie verlassen deinen Rechner nicht.</p>`;
+}
+function wireNoData(){
+  const drop=document.getElementById('drop'), fi=document.getElementById('fileIn');
+  drop.addEventListener('click',()=>fi.click());
+  drop.addEventListener('dragover',e=>{e.preventDefault();drop.classList.add('over');});
+  drop.addEventListener('dragleave',()=>drop.classList.remove('over'));
+  drop.addEventListener('drop',e=>{e.preventDefault();drop.classList.remove('over');loadDataFile(e.dataTransfer.files[0]);});
+  fi.addEventListener('change',()=>loadDataFile(fi.files[0]));
+}
+function loadDataFile(f){
+  if(!f) return;
+  f.text().then(t=>{
+    try{ const j=JSON.parse(t); if(!j.objekte) throw 0; DATA=j; store.set('ic_data',j); render(); }
+    catch(e){ alert('Datei konnte nicht gelesen werden – ist es die richtige immobilien-daten.json?'); }
+  });
+}
+
+/* ========== Dashboard ========== */
+function viewDash(){
+  const units=allUnits();
+  const kalt=units.reduce((s,{e})=>s+(e.kaltmiete||0),0);
+  const warmS=units.reduce((s,{e})=>s+warm(e),0);
+  const rate=(DATA.objekte||[]).reduce((s,o)=>s+(o.finanzierung?.rate||0),0);
+  const cf=kalt-rate;
+  const alerts=[];
+  DATA.objekte.forEach(o=>{
+    (o.notizen||[]).forEach(n=>{ if(/ACHTUNG|WICHTIG|Räumung|umstellen/i.test(n)) alerts.push({o,n,bad:/ACHTUNG|Räumung/i.test(n)}); });
+    o.einheiten.forEach(e=>{ if(/ACHTUNG|Räumung|keine Mietzahlungen/i.test(e.besonderheiten||'')) alerts.push({o,n:e.bezeichnung+': '+e.besonderheiten,bad:true}); });
+  });
+  const potenzial=units.reduce((s,{o,e})=>s+mietCheck(o,e).potenzial,0);
+  const maxV=Math.max(...DATA.objekte.map(o=>Math.max(o.einheiten.reduce((s,e)=>s+(e.kaltmiete||0),0),o.finanzierung?.rate||0)));
+  const chart=DATA.objekte.map(o=>{
+    const miete=o.einheiten.reduce((s,e)=>s+(e.kaltmiete||0),0);
+    const r=o.finanzierung?.rate||0;
+    return `<div class="crow"><div class="cl" title="${esc(o.name)}">${esc(o.name)}</div><div class="bars">
+      <div class="bar" style="width:${maxV?miete/maxV*72:0}%;background:var(--s1)"><span>${EUR(miete)}</span></div>
+      <div class="bar" style="width:${maxV?r/maxV*72:0}%;background:var(--s2)"><span>${EUR(Math.round(r))}</span></div></div></div>`;
+  }).join('');
+  return `<h2>Übersicht</h2><p class="sub">Stand der Daten: ${esc(DATA.meta?.stand||'')} · ${DATA.objekte.length} Objekte, ${units.length} Einheiten</p>
+  <div class="grid kpis">
+    <div class="kpi"><div class="l">Kaltmiete / Monat</div><div class="v">${EUR(kalt)}</div><div class="d">warm ${EUR(Math.round(warmS))}</div></div>
+    <div class="kpi"><div class="l">Kapitaldienst / Monat</div><div class="v">${EUR(Math.round(rate))}</div><div class="d">Summe aller Raten</div></div>
+    <div class="kpi"><div class="l">Cashflow (kalt − Rate)</div><div class="v" style="color:${cf>=0?'var(--good)':'var(--bad)'}">${cf>=0?'+':''}${EUR(Math.round(cf))}</div><div class="d">vor NK, Steuern, Rücklagen</div></div>
+    <div class="kpi"><div class="l">Mieterhöhungs-Potenzial</div><div class="v">+${EUR(potenzial)}</div><div class="d">pro Monat, s. Mietspiegel-Check</div></div>
+    <div class="kpi"><div class="l">Warnungen</div><div class="v" style="color:${alerts.length?'var(--bad)':'var(--good)'}">${alerts.length}</div><div class="d">offene Punkte</div></div>
+  </div>
+  ${alerts.length?`<div class="card"><h3>Handlungsbedarf</h3>${alerts.map(a=>`<div class="alert${a.bad?'':' warn'}"><b>${esc(a.o.name)}:</b> ${esc(a.n)}</div>`).join('')}</div>`:''}
+  <div class="card"><h3>Kaltmiete vs. Rate je Objekt</h3>
+    <div class="legend"><span><i style="background:var(--s1)"></i>Kaltmiete</span><span><i style="background:var(--s2)"></i>Darlehensrate</span></div>
+    <div class="chart">${chart}</div></div>`;
+}
+
+/* ========== Objekte ========== */
+function svUrl(o){ return `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${o.lat},${o.lon}`; }
+function mapUrl(o){ return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(o.adresse)}`; }
+function viewObjekte(){
+  return `<h2>Objekte</h2><p class="sub">Klick auf ein Objekt für Details, Mieter und Aktionen.</p>
+  <div class="grid obj-grid">${DATA.objekte.map(o=>{
+    const miete=o.einheiten.reduce((s,e)=>s+(e.kaltmiete||0),0);
+    const cf=miete-(o.finanzierung?.rate||0);
+    return `<div class="obj-card" data-open="${o.id}">
+      <h3>${esc(o.name)}</h3><div class="addr">${esc(o.adresse)} · ${esc(o.typ||'')}</div>
+      <div class="row"><span>Einheiten</span><b>${o.einheiten.length}</b></div>
+      <div class="row"><span>Kaltmiete</span><b>${EUR(miete)}</b></div>
+      <div class="row"><span>Rate</span><b>${EUR(Math.round(o.finanzierung?.rate||0))}</b></div>
+      <div class="row"><span>Cashflow</span><b style="color:${cf>=0?'var(--good)':'var(--bad)'}">${cf>=0?'+':''}${EUR(Math.round(cf))}</b></div>
+      <div class="btnrow">
+        <a class="btn small" href="${svUrl(o)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">📍 Street View</a>
+        <a class="btn small" href="${mapUrl(o)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Karte</a>
+      </div></div>`;
+  }).join('')}</div>`;
+}
+function viewObjektDetail(id){
+  const o=DATA.objekte.find(x=>x.id===id); if(!o) return 'Objekt nicht gefunden';
+  const f=o.finanzierung||{};
+  const rows=o.einheiten.map(e=>{
+    const c=mietCheck(o,e);
+    const remind={titel:`${e.bezeichnung} – ${o.name}`,datum:isoDate(today()),notiz:`Mieter: ${e.mieter||'–'}`};
+    return `<tr><td><b>${esc(e.bezeichnung)}</b><br><span class="mut">${esc(e.mieter||'leer')}</span></td>
+    <td class="num">${e.flaeche??'–'} m²</td>
+    <td class="num">${EUR(e.kaltmiete)}<br><span class="mut">${c.qm?QM(c.qm):''}</span></td>
+    <td class="num">${EUR(Math.round(warm(e)))}</td>
+    <td>${D(e.mietbeginn)}</td>
+    <td>${e.letzte_erhoehung?D(e.letzte_erhoehung.datum)+`<br><span class="mut">${EUR(e.letzte_erhoehung.alt)} → ${EUR(e.letzte_erhoehung.neu)}</span>`:'–'}</td>
+    <td><span class="badge b-${c.ampel}">${esc(c.status)}</span>${c.potenzial?`<br><span class="mut">+${EUR(c.potenzial)} mögl.</span>`:''}</td>
+    <td><button class="btn small" data-ics='${JSON.stringify(remind).replace(/'/g,"&#39;")}'>⏰ .ics</button></td></tr>`;
+  }).join('');
+  return `<span class="backlink" data-back>← alle Objekte</span>
+  <h2>${esc(o.name)}</h2><p class="sub">${esc(o.adresse)} · ${esc(o.typ||'')} · Eigentümer: ${esc(o.eigentuemer||'–')}</p>
+  <div class="btnrow" style="margin-bottom:16px">
+    <a class="btn" href="${svUrl(o)}" target="_blank" rel="noopener">📍 Street View öffnen</a>
+    <a class="btn" href="${mapUrl(o)}" target="_blank" rel="noopener">Google Maps</a>
+    <button class="btn" data-ics='${JSON.stringify({titel:o.name,datum:isoDate(today()),notiz:o.adresse}).replace(/'/g,"&#39;")}'>⏰ Erinnerung</button>
+  </div>
+  <div class="grid kpis">
+    <div class="kpi"><div class="l">Kaufpreis</div><div class="v">${EUR(o.kaufpreis)}</div><div class="d">${o.kaufdatum?'Kauf '+D(o.kaufdatum):''}</div></div>
+    <div class="kpi"><div class="l">Darlehen</div><div class="v">${EUR(f.darlehen??f.restschuld)}</div><div class="d">${esc(f.bank||'')}</div></div>
+    <div class="kpi"><div class="l">Konditionen</div><div class="v">${f.zins!=null?f.zins.toLocaleString('de-DE')+' %':'–'}</div><div class="d">${f.tilgung!=null?'Tilgung '+f.tilgung.toLocaleString('de-DE')+' %':''}</div></div>
+    <div class="kpi"><div class="l">Rate / Monat</div><div class="v">${EUR(Math.round(f.rate||0))}</div><div class="d">${f.zinsbindung_ende?'Zinsbindung bis '+D(f.zinsbindung_ende):''}</div></div>
+  </div>
+  <div class="card"><h3>Einheiten &amp; Mieter</h3>
+  <div style="overflow-x:auto"><table><thead><tr><th>Einheit / Mieter</th><th class="num">Fläche</th><th class="num">Kalt</th><th class="num">Warm</th><th>Beginn</th><th>Letzte Erhöhung</th><th>Mietspiegel</th><th></th></tr></thead><tbody>${rows}</tbody></table></div></div>
+  ${o.einheiten.some(e=>e.besonderheiten)?`<div class="card"><h3>Besonderheiten</h3>${o.einheiten.filter(e=>e.besonderheiten).map(e=>`<p class="note" style="margin:5px 0"><b>${esc(e.bezeichnung)}:</b> ${esc(e.besonderheiten)}</p>`).join('')}</div>`:''}
+  ${(o.notizen||[]).length?`<div class="card"><h3>Notizen zum Objekt</h3>${o.notizen.map(n=>`<p class="note" style="margin:5px 0">• ${esc(n)}</p>`).join('')}</div>`:''}`;
+}
+
+/* ========== Mietspiegel-Check ========== */
+function viewMiet(){
+  const rows=allUnits().map(({o,e})=>{
+    const c=mietCheck(o,e);
+    const ms=mietspiegelOf(o.ort);
+    const frei=c.naechsteErhoehung;
+    const remind = c.potenzial>0&&frei?{titel:`Mieterhöhung: ${e.bezeichnung} (${e.mieter||'–'})`,datum:isoDate(frei<today()?today():addMonths(frei,-2)),notiz:`${o.name} – Potenzial +${c.potenzial} €/Monat. ${c.hinweis.join(' ')}`}:null;
+    return `<tr><td><b>${esc(e.bezeichnung)}</b><br><span class="mut">${esc(o.name)} · ${esc(e.mieter||'leer')}</span></td>
+    <td class="num">${c.qm?QM(c.qm):'–'}</td>
+    <td class="num">${ms?QM(ms.wert):'–'}<br><span class="mut">${ms?ms.spanne[0].toLocaleString('de-DE')+'–'+ms.spanne[1].toLocaleString('de-DE'):''}</span></td>
+    <td><span class="badge b-${c.ampel}">${esc(c.status)}</span></td>
+    <td class="num">${c.potenzial?'+'+EUR(c.potenzial):'–'}</td>
+    <td>${frei?(frei<=today()?'<span class="badge b-good">sofort</span>':frei.toLocaleDateString('de-DE')):'–'}</td>
+    <td>${remind?`<button class="btn small" data-ics='${JSON.stringify(remind).replace(/'/g,"&#39;")}'>⏰</button>`:''}</td></tr>
+    ${c.hinweis.length?`<tr><td colspan="7" class="note" style="padding-top:0">↳ ${esc(c.hinweis.join(' '))}</td></tr>`:''}`;
+  }).join('');
+  return `<h2>Mietspiegel-Check</h2>
+  <p class="sub">Vergleich der aktuellen Kaltmieten mit der ortsüblichen Vergleichsmiete inkl. Wartefrist (§558: 15 Monate) und Kappungsgrenze. Referenzwerte unter Einstellungen anpassbar.</p>
+  <div class="card"><div style="overflow-x:auto"><table><thead><tr><th>Einheit</th><th class="num">Ist €/m²</th><th class="num">Vergleich</th><th>Bewertung</th><th class="num">Potenzial/Monat</th><th>Erhöhung möglich ab</th><th></th></tr></thead><tbody>${rows}</tbody></table></div></div>
+  <div class="card"><h3>Quellen der Vergleichswerte</h3>${(DATA.mietspiegel||[]).map(m=>`<p class="note" style="margin:4px 0"><b>${esc(m.ort)}</b> (${QM(m.wert)}, Kappung ${m.kappung} %): ${esc(m.quelle)} ${m.url?`– <a href="${esc(m.url)}" target="_blank" rel="noopener">Quelle</a>`:''}</p>`).join('')}
+  <p class="note" style="margin-top:10px">⚠︎ Portalwerte bilden Angebotsmieten ab und liegen meist über der ortsüblichen Bestands-Vergleichsmiete. Vor einem Erhöhungsverlangen nach §558 BGB drei Vergleichswohnungen oder einen (qualifizierten) Mietspiegel heranziehen. Keine Rechtsberatung.</p></div>`;
+}
+
+/* ========== Erinnerungen ========== */
+function viewErinner(){
+  const list=autoReminders();
+  return `<h2>Erinnerungen</h2><p class="sub">Automatisch aus deinen Daten abgeleitete Termine. Jede Erinnerung lässt sich als .ics-Datei in deinen Kalender (Apple/Google/Outlook) übernehmen.</p>
+  <div class="btnrow" style="margin-bottom:14px"><button class="btn primary" data-ics='${JSON.stringify({titel:"",datum:isoDate(today()),notiz:""})}'>+ Eigene Erinnerung</button></div>
+  <div class="card"><table><thead><tr><th>Datum</th><th>Kategorie</th><th>Erinnerung</th><th></th></tr></thead><tbody>
+  ${list.map(r=>`<tr><td class="mono">${D(r.datum)}</td><td><span class="badge b-mut">${esc(r.kat)}</span></td><td><b>${esc(r.titel)}</b><br><span class="note">${esc(r.notiz)}</span></td>
+  <td><button class="btn small" data-icsdirect='${JSON.stringify(r).replace(/'/g,"&#39;")}'>⏰ .ics</button></td></tr>`).join('')}
+  </tbody></table></div>`;
+}
+/* ========== Bank & Zahlungen ========== */
+function viewBank(){
+  const months=[...new Set(PAYMENTS.map(p=>p.datum?.slice(0,7)).filter(Boolean))].sort().reverse();
+  const sel = window._bankMonth && months.includes(window._bankMonth) ? window._bankMonth : months[0];
+  window._bankMonth = sel;
+  let body='';
+  if(sel){
+    const monthPays = PAYMENTS.filter(p=>p.datum?.slice(0,7)===sel && p.betrag>0);
+    const matched = {};
+    const unmatched = [];
+    monthPays.forEach(p=>{
+      const uid = matchPayment(p);
+      if(uid){ (matched[uid]=matched[uid]||[]).push(p); } else unmatched.push(p);
+    });
+    const rows = allUnits().filter(({e})=>e.mieter).map(({o,e})=>{
+      const soll = warm(e);
+      const pays = matched[e.id]||[];
+      const ist = pays.reduce((s,p)=>s+p.betrag,0);
+      const st = ist<=0?'bad':(ist+1<soll?'warn':'good');
+      const stT = ist<=0?'offen':(ist+1<soll?'Teilzahlung':'bezahlt');
+      return `<tr><td><b>${esc(e.bezeichnung)}</b><br><span class="mut">${esc(o.name)} · ${esc(e.mieter)}</span></td>
+      <td class="num">${EUR2(soll)}</td>
+      <td class="num">${ist?EUR2(ist):'–'}${pays.length?`<br><span class="mut">${pays.map(p=>D(p.datum)).join(', ')}</span>`:''}</td>
+      <td><span class="badge b-${st}">${stT}</span></td></tr>`;
+    }).join('');
+    const um = unmatched.map((p,i)=>`<tr><td class="mono">${D(p.datum)}</td><td>${esc(p.name||'')}<br><span class="mut mono">${esc(p.iban||'')}</span></td>
+      <td class="note">${esc((p.zweck||'').slice(0,90))}</td><td class="num">${EUR2(p.betrag)}</td>
+      <td><select data-assign="${esc(p.key)}"><option value="">– zuordnen –</option>
+      ${allUnits().map(({o,e})=>`<option value="${e.id}">${esc(e.bezeichnung)} (${esc(e.mieter||'leer')})</option>`).join('')}</select></td></tr>`).join('');
+    body = `<div class="pill-tabs">${months.map(m=>`<button class="${m===sel?'active':''}" data-month="${m}">${m.slice(5)}/${m.slice(0,4)}</button>`).join('')}</div>
+    <div class="card"><h3>Soll/Ist ${sel.slice(5)}/${sel.slice(0,4)}</h3>
+    <div style="overflow-x:auto"><table><thead><tr><th>Einheit / Mieter</th><th class="num">Soll (warm)</th><th class="num">Eingegangen</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table></div></div>
+    ${unmatched.length?`<div class="card"><h3>Nicht zugeordnete Eingänge (${unmatched.length})</h3>
+    <div style="overflow-x:auto"><table><thead><tr><th>Datum</th><th>Absender</th><th>Verwendungszweck</th><th class="num">Betrag</th><th>Zuordnung</th></tr></thead><tbody>${um}</tbody></table></div>
+    <p class="note">Eine manuelle Zuordnung wird gespeichert – künftige Zahlungen mit derselben IBAN/demselben Namen werden automatisch erkannt.</p></div>`:''}`;
+  } else {
+    body = `<div class="card"><p class="note">Noch keine Umsätze importiert.</p></div>`;
+  }
+  return `<h2>Bank &amp; Zahlungen</h2>
+  <p class="sub">Kontoumsätze als CSV (Sparkasse, Commerzbank, comdirect u.a.) oder CAMT.053-XML aus dem Online-Banking exportieren und hier importieren. Zahlungen werden automatisch den Mietern zugeordnet (IBAN → Name → Betrag).</p>
+  <div class="drop" id="bankDrop" style="padding:26px;margin-bottom:16px">Umsatz-Datei (CSV / CAMT-XML) hierher ziehen oder klicken
+  <input type="file" id="bankFile" accept=".csv,.xml,.txt" style="display:none" multiple></div>
+  ${PAYMENTS.length?`<p class="note" style="margin:-6px 0 14px">${PAYMENTS.length} Umsätze gespeichert · <a href="#" id="clearPays">alle löschen</a></p>`:''}
+  ${body}`;
+}
+function wireBank(){
+  const drop=document.getElementById('bankDrop'), fi=document.getElementById('bankFile');
+  drop.addEventListener('click',()=>fi.click());
+  drop.addEventListener('dragover',e=>{e.preventDefault();drop.classList.add('over');});
+  drop.addEventListener('dragleave',()=>drop.classList.remove('over'));
+  drop.addEventListener('drop',e=>{e.preventDefault();drop.classList.remove('over');[...e.dataTransfer.files].forEach(importBankFile);});
+  fi.addEventListener('change',()=>[...fi.files].forEach(importBankFile));
+  document.querySelectorAll('[data-month]').forEach(b=>b.addEventListener('click',()=>{window._bankMonth=b.dataset.month;render();}));
+  document.querySelectorAll('[data-assign]').forEach(s=>s.addEventListener('change',()=>{
+    const p=PAYMENTS.find(x=>x.key===s.dataset.assign); if(!p||!s.value) return;
+    if(p.iban) ASSIGN['iban:'+p.iban]=s.value; else if(p.name) ASSIGN['name:'+norm(p.name)]=s.value;
+    ASSIGN['key:'+p.key]=s.value;
+    store.set('ic_assign',ASSIGN); render();
+  }));
+  const cp=document.getElementById('clearPays');
+  if(cp) cp.addEventListener('click',e=>{e.preventDefault();if(confirm('Alle importierten Umsätze löschen?')){PAYMENTS=[];store.set('ic_payments',PAYMENTS);render();}});
+}
+function importBankFile(f){
+  if(!f) return;
+  f.arrayBuffer().then(buf=>{
+    let text = new TextDecoder('utf-8',{fatal:false}).decode(buf);
+    if(text.includes('�')) text = new TextDecoder('windows-1252').decode(buf);
+    let items=[];
+    if(/^\s*<\?xml|<Document/i.test(text)) items = parseCAMT(text);
+    else items = parseCSV(text);
+    if(!items.length){ alert('Keine Umsätze in "'+f.name+'" erkannt. Bitte CSV-Export des Online-Bankings oder CAMT.053-XML verwenden.'); return; }
+    const known=new Set(PAYMENTS.map(p=>p.key));
+    let added=0;
+    items.forEach(p=>{ if(!known.has(p.key)){ PAYMENTS.push(p); added++; } });
+    store.set('ic_payments',PAYMENTS);
+    window._bankMonth=null;
+    alert(added+' neue Umsätze importiert ('+(items.length-added)+' Duplikate übersprungen).');
+    render();
+  });
+}
+function payKey(p){ return [p.datum,p.betrag,norm(p.name).slice(0,20),norm(p.zweck).slice(0,30)].join('|'); }
+function parseCSV(text){
+  const lines=text.split(/\r?\n/).filter(l=>l.trim());
+  if(lines.length<2) return [];
+  const delim=(lines[0].match(/;/g)||[]).length>=(lines[0].match(/,/g)||[]).length?';':',';
+  const split=l=>{const out=[];let cur='',q=false;for(const ch of l){if(ch==='"'){q=!q;continue}if(ch===delim&&!q){out.push(cur);cur='';}else cur+=ch;}out.push(cur);return out;};
+  const head=split(lines[0]).map(h=>norm(h));
+  const find=(...keys)=>head.findIndex(h=>keys.some(k=>h.includes(k)));
+  const ci={
+    datum: find('buchungstag','buchungsdatum','valutadatum','wertstellung','datum'),
+    name: find('beguenstigter zahlungspflichtiger','name zahlungsbeteiligter','beguenstigter','zahlungspflichtiger','auftraggeber','empfaenger','name'),
+    iban: find('iban zahlungsbeteiligter','iban auftraggeberkonto','kontonummer iban','iban'),
+    zweck: find('verwendungszweck','buchungstext','umsatztext'),
+    betrag: find('betrag','umsatz in eur','umsatz')
+  };
+  if(ci.datum<0||ci.betrag<0) return [];
+  const out=[];
+  for(let i=1;i<lines.length;i++){
+    const c=split(lines[i]); if(c.length<3) continue;
+    const rawD=(c[ci.datum]||'').trim();
+    let dm=rawD.match(/(\d{2})\.(\d{2})\.(\d{2,4})/);
+    let datum=null;
+    if(dm){ let y=dm[3].length===2?'20'+dm[3]:dm[3]; datum=`${y}-${dm[2]}-${dm[1]}`; }
+    else { dm=rawD.match(/(\d{4})-(\d{2})-(\d{2})/); if(dm) datum=dm[0]; }
+    if(!datum) continue;
+    let b=(c[ci.betrag]||'').replace(/\s|€/g,'');
+    if(/,\d{1,2}$/.test(b)) b=b.replace(/\./g,'').replace(',','.');
+    const betrag=parseFloat(b);
+    if(isNaN(betrag)) continue;
+    const p={datum, betrag, name:(c[ci.name]||'').trim(), iban:(c[ci.iban]||'').replace(/\s/g,'').toUpperCase(), zweck:(c[ci.zweck]||'').trim()};
+    p.key=payKey(p); out.push(p);
+  }
+  return out;
+}
+function parseCAMT(text){
+  const doc=new DOMParser().parseFromString(text,'text/xml');
+  const out=[];
+  doc.querySelectorAll('Ntry').forEach(n=>{
+    const g=s=>n.querySelector(s)?.textContent?.trim()||'';
+    const cdt = g('CdtDbtInd')==='CRDT';
+    const amt = parseFloat(g('Amt'));
+    const datum = g('BookgDt Dt')||g('ValDt Dt');
+    const dtl = n.querySelector('NtryDtls TxDtls');
+    const gd = s=>dtl?.querySelector(s)?.textContent?.trim()||'';
+    const p={datum, betrag: cdt?amt:-amt, name: gd('RltdPties Dbtr Nm')||gd('Dbtr Nm'), iban: (gd('DbtrAcct Id IBAN')||'').toUpperCase(), zweck: [...(dtl?.querySelectorAll('RmtInf Ustrd')||[])].map(x=>x.textContent).join(' ')};
+    if(p.datum && !isNaN(p.betrag)){ p.key=payKey(p); out.push(p); }
+  });
+  return out;
+}
+function matchPayment(p){
+  if(ASSIGN['key:'+p.key]) return ASSIGN['key:'+p.key];
+  if(p.iban && ASSIGN['iban:'+p.iban]) return ASSIGN['iban:'+p.iban];
+  if(p.name && ASSIGN['name:'+norm(p.name)]) return ASSIGN['name:'+norm(p.name)];
+  const units=allUnits();
+  // 1) IBAN aus Stammdaten
+  if(p.iban){ const hit=units.find(({e})=>e.iban && e.iban.replace(/\s/g,'')===p.iban); if(hit) return hit.e.id; }
+  // 2) Nachname des Mieters in Absendername oder Verwendungszweck
+  const hay=norm(p.name+' '+p.zweck);
+  let best=null;
+  for(const {e} of units){
+    if(!e.mieter) continue;
+    const tokens=norm(e.mieter).split(' ').filter(t=>t.length>3 && !['familie','herr','frau'].includes(t));
+    if(tokens.some(t=>hay.includes(t))){
+      if(best) { best='AMBIG'; break; } best=e.id;
+    }
+  }
+  if(best && best!=='AMBIG') return best;
+  if(best==='AMBIG') return null;
+  // 3) exakter Warmmieten-Betrag (eindeutig)
+  const amountHits=units.filter(({e})=>Math.abs(warm(e)-p.betrag)<0.01);
+  if(amountHits.length===1) return amountHits[0].e.id;
+  return null;
+}
+/* ========== KI-Fragen (Claude API) ========== */
+let CHAT=[];
+function viewKI(){
+  const hasKey=!!SETTINGS.apiKey;
+  return `<h2>KI-Fragen zu deinen Immobilien</h2>
+  <p class="sub">Claude kennt alle geladenen Objekt-, Mieter- und Finanzierungsdaten und beantwortet auch strategische Fragen (Verkauf, Erhöhungen, Finanzierung, Steuern – ohne Gewähr).</p>
+  ${hasKey?'':`<div class="alert warn">Kein API-Schlüssel hinterlegt. Unter <b>Einstellungen</b> einen Anthropic-API-Key eintragen (console.anthropic.com → API Keys).</div>`}
+  <div class="card"><div class="chat" id="chatBox">
+  ${CHAT.length?CHAT.map(m=>`<div class="msg ${m.role==='user'?'user':'ai'}">${m.role==='user'?esc(m.content):mdLite(m.content)}</div>`).join(''):
+  `<p class="note">Beispiele: „Welche Miete kann ich bei Neuvermietung der Braustraße DG rechts verlangen?" · „Wo ist mein größtes Cashflow-Risiko?" · „Lohnt sich eine Sondertilgung beim Schubertweg?" · „Welche Erhöhungen sollte ich dieses Jahr angehen?"</p>`}
+  </div>
+  <div class="chat-input"><textarea id="kiQ" placeholder="Frage stellen … (Enter = senden, Shift+Enter = neue Zeile)"></textarea>
+  <button class="btn primary" id="kiSend">Senden</button></div></div>`;
+}
+function mdLite(t){
+  let h=esc(t);
+  h=h.replace(/\*\*(.+?)\*\*/g,'<b>$1</b>');
+  h=h.replace(/^### (.*)$/gm,'<h4>$1</h4>').replace(/^## (.*)$/gm,'<h4>$1</h4>');
+  h=h.replace(/^[-•] (.*)$/gm,'· $1');
+  return h;
+}
+function wireKI(){
+  const q=document.getElementById('kiQ'), btn=document.getElementById('kiSend');
+  if(!q) return;
+  const send=async()=>{
+    const text=q.value.trim(); if(!text) return;
+    if(!SETTINGS.apiKey){ alert('Bitte zuerst unter Einstellungen einen Anthropic-API-Key hinterlegen.'); return; }
+    CHAT.push({role:'user',content:text}); q.value=''; render();
+    const box=document.getElementById('chatBox');
+    const tmp=document.createElement('div'); tmp.className='msg ai'; tmp.textContent='… denke nach …'; box.appendChild(tmp);
+    try{
+      const sys=`Du bist der persönliche Immobilien-Assistent von Christian Specht (Specht & Waschkowski Immobilien eGbR). Antworte auf Deutsch, per Du, direkt und ohne Floskeln. Bei Empfehlungen: klare Empfehlung mit Begründung. Bei Rechts-/Steuerfragen: Grundlagen nennen, aber auf Steuerberater/Anwalt verweisen. Heutiges Datum: ${new Date().toLocaleDateString('de-DE')}.
+Hier die vollständigen Portfoliodaten (JSON):
+${JSON.stringify(DATA)}`;
+      const resp=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{
+        'content-type':'application/json','x-api-key':SETTINGS.apiKey,
+        'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'
+      },body:JSON.stringify({model:SETTINGS.model||'claude-sonnet-4-5',max_tokens:1500,system:sys,
+        messages:CHAT.map(m=>({role:m.role,content:m.content}))})});
+      const j=await resp.json();
+      if(j.error) throw new Error(j.error.message||'API-Fehler');
+      CHAT.push({role:'assistant',content:j.content.map(c=>c.text||'').join('\n')});
+    }catch(e){ CHAT.push({role:'assistant',content:'Fehler: '+e.message+'\n(API-Key prüfen; der Key braucht Guthaben auf console.anthropic.com.)'}); }
+    render();
+    const b2=document.getElementById('chatBox'); if(b2) b2.scrollTop=b2.scrollHeight;
+  };
+  btn.addEventListener('click',send);
+  q.addEventListener('keydown',e=>{ if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send();} });
+}
+
+/* ========== Einstellungen ========== */
+function viewConf(){
+  return `<h2>Einstellungen</h2><p class="sub">Alles wird nur lokal in deinem Browser gespeichert.</p>
+  <div class="card"><h3>Claude API</h3>
+    <label>Anthropic API-Key</label><input type="password" id="cfKey" value="${esc(SETTINGS.apiKey)}" placeholder="sk-ant-…">
+    <label>Modell</label><select id="cfModel">
+      ${['claude-sonnet-4-5','claude-opus-4-5','claude-haiku-4-5'].map(m=>`<option ${SETTINGS.model===m?'selected':''}>${m}</option>`).join('')}
+    </select>
+    <div class="btnrow"><button class="btn primary" id="cfSave">Speichern</button></div>
+    <p class="note" style="margin-top:10px">Key erstellen: <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com</a>. Der Key wird nur im Browser gespeichert und direkt an die Anthropic-API gesendet.</p></div>
+  <div class="card"><h3>Daten</h3>
+    <div class="btnrow">
+      <button class="btn" id="cfLoad">Neue Datendatei laden</button>
+      <button class="btn" id="cfExport">Daten exportieren (JSON)</button>
+      <button class="btn" id="cfReset" style="color:var(--bad)">Alles zurücksetzen</button>
+    </div>
+    <input type="file" id="cfFile" accept=".json" style="display:none">
+    <p class="note" style="margin-top:10px">Datenstand: ${esc(DATA?.meta?.stand||'–')} · ${DATA?DATA.objekte.length+' Objekte':''} · ${PAYMENTS.length} importierte Umsätze</p></div>
+  <div class="card"><h3>Mietspiegel-Referenzwerte (€/m², bearbeitbar)</h3>
+    <table><thead><tr><th>Ort</th><th class="num">Vergleichsmiete</th><th class="num">Spanne von</th><th class="num">bis</th><th class="num">Kappung %</th></tr></thead><tbody>
+    ${(DATA?.mietspiegel||[]).map((m,i)=>`<tr><td>${esc(m.ort)}</td>
+      <td class="num"><input type="number" step="0.1" style="width:80px" data-ms="${i}:wert" value="${m.wert}"></td>
+      <td class="num"><input type="number" step="0.1" style="width:80px" data-ms="${i}:s0" value="${m.spanne[0]}"></td>
+      <td class="num"><input type="number" step="0.1" style="width:80px" data-ms="${i}:s1" value="${m.spanne[1]}"></td>
+      <td class="num"><input type="number" step="5" style="width:70px" data-ms="${i}:kappung" value="${m.kappung}"></td></tr>`).join('')}
+    </tbody></table>
+    <div class="btnrow"><button class="btn" id="cfMsSave">Referenzwerte speichern</button></div></div>
+  <div class="card"><h3>Bankkonten (Zuordnung eingehender Zahlungen)</h3>
+    ${(DATA?.meta?.konten||[]).map(k=>`<p class="note" style="margin:4px 0"><b>${esc(k.name)}</b><br><span class="mono">${esc(k.iban)}</span> · ${esc(k.bank)} – ${esc(k.verwendung)}</p>`).join('')||'<p class="note">–</p>'}</div>`;
+}
+function wireConf(){
+  document.getElementById('cfSave').addEventListener('click',()=>{
+    SETTINGS.apiKey=document.getElementById('cfKey').value.trim();
+    SETTINGS.model=document.getElementById('cfModel').value;
+    store.set('ic_settings',SETTINGS); alert('Gespeichert.');
+  });
+  document.getElementById('cfLoad').addEventListener('click',()=>document.getElementById('cfFile').click());
+  document.getElementById('cfFile').addEventListener('change',e=>loadDataFile(e.target.files[0]));
+  document.getElementById('cfExport').addEventListener('click',()=>{
+    const blob=new Blob([JSON.stringify(DATA,null,2)],{type:'application/json'});
+    const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='immobilien-daten.json';a.click();
+  });
+  document.getElementById('cfReset').addEventListener('click',()=>{
+    if(confirm('Wirklich alle Daten, Umsätze und Einstellungen aus dem Browser löschen?')){
+      ['ic_data','ic_settings','ic_assign','ic_payments'].forEach(k=>store.del(k));
+      DATA=null;SETTINGS={apiKey:'',model:'claude-sonnet-4-5'};ASSIGN={};PAYMENTS=[];CHAT=[];render();
+    }
+  });
+  document.getElementById('cfMsSave').addEventListener('click',()=>{
+    document.querySelectorAll('[data-ms]').forEach(inp=>{
+      const [i,f]=inp.dataset.ms.split(':');const m=DATA.mietspiegel[+i];const v=parseFloat(inp.value);
+      if(isNaN(v))return;
+      if(f==='wert')m.wert=v; else if(f==='s0')m.spanne[0]=v; else if(f==='s1')m.spanne[1]=v; else if(f==='kappung')m.kappung=v;
+    });
+    store.set('ic_data',DATA); alert('Referenzwerte gespeichert.'); render();
+  });
+}
+
+/* ========== ICS-Dialog & Start ========== */
+document.addEventListener('DOMContentLoaded',()=>{
+  const dlg=document.createElement('dialog');
+  dlg.id='icsDlg';
+  dlg.innerHTML=`<h3 style="margin:0 0 8px">Erinnerung als .ics</h3>
+  <label>Titel</label><input type="text" id="icsT">
+  <label>Datum</label><input type="date" id="icsD">
+  <label>Notiz</label><textarea id="icsN" rows="3"></textarea>
+  <div class="btnrow" style="margin-top:14px;justify-content:flex-end">
+    <button class="btn" id="icsCancel">Abbrechen</button>
+    <button class="btn primary" id="icsOk">.ics herunterladen</button></div>`;
+  document.body.appendChild(dlg);
+  document.getElementById('icsCancel').addEventListener('click',()=>dlg.close());
+  document.getElementById('icsOk').addEventListener('click',()=>{
+    const t=document.getElementById('icsT').value.trim()||'Erinnerung';
+    downloadICS(t,document.getElementById('icsD').value,document.getElementById('icsN').value);
+    dlg.close();
+  });
+  render();
+});
+</script>
+</body>
+</html>
