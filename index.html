@@ -486,14 +486,23 @@ function parseCSV(text){
   if(lines.length<2) return [];
   const delim=(lines[0].match(/;/g)||[]).length>=(lines[0].match(/,/g)||[]).length?';':',';
   const split=l=>{const out=[];let cur='',q=false;for(const ch of l){if(ch==='"'){q=!q;continue}if(ch===delim&&!q){out.push(cur);cur='';}else cur+=ch;}out.push(cur);return out;};
-  const head=split(lines[0]).map(h=>norm(h));
-  const find=(...keys)=>head.findIndex(h=>keys.some(k=>h.includes(k)));
+  const trans = s => norm(s).replace(/ä/g,'ae').replace(/ö/g,'oe').replace(/ü/g,'ue').replace(/ß/g,'ss');
+  const head=split(lines[0]).map(h=>trans(h));
+  // Schlüssel in Prioritätsreihenfolge suchen (erst exakte/spezifische, dann generische); exclude verhindert Fehltreffer
+  const findCol=(keys,exclude)=>{
+    for(const k of keys){
+      const i=head.findIndex(h=>h.includes(k)&&!(exclude||[]).some(x=>h.includes(x)));
+      if(i>=0) return i;
+    }
+    return -1;
+  };
   const ci={
-    datum: find('buchungstag','buchungsdatum','valutadatum','wertstellung','datum'),
-    name: find('beguenstigter zahlungspflichtiger','name zahlungsbeteiligter','beguenstigter','zahlungspflichtiger','auftraggeber','empfaenger','name'),
-    iban: find('iban zahlungsbeteiligter','iban auftraggeberkonto','kontonummer iban','iban'),
-    zweck: find('verwendungszweck','buchungstext','umsatztext'),
-    betrag: find('betrag','umsatz in eur','umsatz')
+    datum: findCol(['buchungstag','buchungsdatum','valutadatum','wertstellung','datum']),
+    name: findCol(['sender','name zahlungsbeteiligter','beguenstigter zahlungspflichtiger','beguenstigter','zahlungspflichtiger','auftraggeber','name']),
+    name2: findCol(['empfaenger']),
+    iban: findCol(['iban zahlungsbeteiligter','iban auftraggeberkonto','kontonummer iban','iban'],['kontoinhaber']),
+    zweck: findCol(['verwendungszweck','buchungstext','umsatztext']),
+    betrag: findCol(['betrag','umsatz in eur','umsatz'],['umsatzart'])
   };
   if(ci.datum<0||ci.betrag<0) return [];
   const out=[];
@@ -509,7 +518,8 @@ function parseCSV(text){
     if(/,\d{1,2}$/.test(b)) b=b.replace(/\./g,'').replace(',','.');
     const betrag=parseFloat(b);
     if(isNaN(betrag)) continue;
-    const p={datum, betrag, name:(c[ci.name]||'').trim(), iban:(c[ci.iban]||'').replace(/\s/g,'').toUpperCase(), zweck:(c[ci.zweck]||'').trim()};
+    const name=((c[ci.name]||'').trim()) || ((ci.name2>=0?c[ci.name2]:'')||'').trim();
+    const p={datum, betrag, name, iban:(ci.iban>=0?(c[ci.iban]||''):'').replace(/\s/g,'').toUpperCase(), zweck:(c[ci.zweck]||'').trim()};
     p.key=payKey(p); out.push(p);
   }
   return out;
@@ -534,23 +544,30 @@ function matchPayment(p){
   if(p.iban && ASSIGN['iban:'+p.iban]) return ASSIGN['iban:'+p.iban];
   if(p.name && ASSIGN['name:'+norm(p.name)]) return ASSIGN['name:'+norm(p.name)];
   const units=allUnits();
+  // Eigene Überträge (Specht/Waschkowski-Konten) nie automatisch als Miete zuordnen
+  if(/specht|waschkowski/i.test(p.name||'')) return null;
   // 1) IBAN aus Stammdaten
   if(p.iban){ const hit=units.find(({e})=>e.iban && e.iban.replace(/\s/g,'')===p.iban); if(hit) return hit.e.id; }
-  // 2) Nachname des Mieters in Absendername oder Verwendungszweck
-  const hay=norm(p.name+' '+p.zweck);
-  let best=null;
+  // 2) Nachname des Mieters in Absendername oder Verwendungszweck (keine reinen Zahlen-Tokens wie Jahreszahlen)
+  const hayTokens=new Set(norm(p.name+' '+p.zweck).split(' '));
+  const stop=['familie','herr','frau','miete','mieter'];
+  let best=null, bestScore=0, tie=false;
   for(const {e} of units){
     if(!e.mieter) continue;
-    const tokens=norm(e.mieter).split(' ').filter(t=>t.length>3 && !['familie','herr','frau'].includes(t));
-    if(tokens.some(t=>hay.includes(t))){
-      if(best) { best='AMBIG'; break; } best=e.id;
+    const tokens=norm(e.mieter).split(' ').filter(t=>t.length>3 && !/^\d+$/.test(t) && !stop.includes(t));
+    const score=tokens.filter(t=>hayTokens.has(t)).length;
+    if(score>0){
+      if(score>bestScore){ best=e.id; bestScore=score; tie=false; }
+      else if(score===bestScore && best!==e.id){ tie=true; }
     }
   }
-  if(best && best!=='AMBIG') return best;
-  if(best==='AMBIG') return null;
-  // 3) exakter Warmmieten-Betrag (eindeutig)
-  const amountHits=units.filter(({e})=>Math.abs(warm(e)-p.betrag)<0.01);
-  if(amountHits.length===1) return amountHits[0].e.id;
+  if(best && !tie) return best;
+  if(best && tie) return null;
+  // 3) exakter Warmmieten-Betrag (eindeutig) – nur wenn der Zweck nach Miete aussieht
+  if(/miete|kaltmiete|warmmiete|nk|pacht/i.test(p.zweck||'')){
+    const amountHits=units.filter(({e})=>Math.abs(warm(e)-p.betrag)<0.01);
+    if(amountHits.length===1) return amountHits[0].e.id;
+  }
   return null;
 }
 /* ========== KI-Fragen (Claude API) ========== */
