@@ -274,9 +274,14 @@ function offeneMonate(o,e){
   const months=[...new Set(credits.map(perOf).filter(Boolean))].sort();
   const beginn=e.mietbeginn?e.mietbeginn.slice(0,7):null;
   const soll=warm(e);
+  // Erster Monat, in dem für diese Einheit eine Zahlung erkannt wurde: frühere Monate liegen
+  // i.d.R. vor dem Exportfenster des Kontoauszugs und werden nicht als offen gewertet.
+  const paidMonths=months.filter(m=>credits.some(p=>perOf(p)===m && matchPayment(p)===e.id));
+  const firstPaid=paidMonths[0]||null;
   const out=[];
   for(const m of months){
     if(beginn && m<beginn) continue;
+    if(firstPaid && m<firstPaid) continue;
     const ist=credits.filter(p=>perOf(p)===m && matchPayment(p)===e.id).reduce((s,p)=>s+p.betrag,0);
     if(ist+0.01<soll) out.push({monat:m, soll, ist, offen:Math.round((soll-ist)*100)/100});
   }
@@ -293,6 +298,24 @@ function briefMahnung(o,e){
 `\n\nWir weisen darauf hin, dass Sie sich mit den genannten Beträgen in Zahlungsverzug befinden (§ 286 BGB). Bei einem Rückstand in Höhe von zwei Monatsmieten sind wir berechtigt, das Mietverhältnis fristlos zu kündigen (§ 543 Abs. 2 Nr. 3 BGB). Wir möchten diesen Schritt vermeiden – bitte nehmen Sie bei Zahlungsschwierigkeiten kurzfristig Kontakt mit uns auf.` :
 (off.length>1?`\n\nSie befinden sich mit den genannten Beträgen in Zahlungsverzug (§ 286 BGB). Bitte gleichen Sie den Rückstand zeitnah aus.`:'');
   return `${absenderFor(o)}\n\n${e.mieter||'[Mieter]'}\n${o.adresse} – ${e.bezeichnung}\n\nZahlungserinnerung – Miete ${off.length===1?monatName(off[0].monat):'(mehrere Monate)'} – ${e.bezeichnung}, ${o.adresse}\n\n${anredeFor(e.mieter)}\n\nbei der Durchsicht unserer Kontoeingänge haben wir festgestellt, dass für die von Ihnen gemietete Einheit folgende Mietzahlungen noch nicht bzw. nicht vollständig eingegangen sind:\n\n${liste||'- [keine offenen Monate in den importierten Umsätzen gefunden – bitte prüfen]'}\n\nOffener Gesamtbetrag: ${EUR2(gesamt)}\n\nBitte überweisen Sie den offenen Betrag bis zum ${DFMT(frist)} auf folgendes Konto:\n\nKontoinhaber: ${konto?konto.name.split('–')[0].trim():absenderFor(o)}\nIBAN: ${ibanFmt}${konto?`\nBank: ${konto.bank}`:''}\nVerwendungszweck: Miete ${e.bezeichnung}, ${off.map(x=>monatName(x.monat)).join(' + ')}\n\nSollte sich Ihre Zahlung mit diesem Schreiben überschnitten haben, betrachten Sie es bitte als gegenstandslos.${eskalation}\n\nMit freundlichen Grüßen\n${absenderFor(o)}`;
+}
+function zahlungsStatus(o,e){
+  if(!e.mieter || !PAYMENTS.some(p=>p.betrag>0)) return {kind:'nodata'};
+  const off=offeneMonate(o,e);
+  if(!off.length) return {kind:'paid'};
+  const anyObj=o.einheiten.some(u=>PAYMENTS.some(p=>p.betrag>0 && matchPayment(p)===u.id));
+  if(!anyObj) return {kind:'noacct'};
+  return {kind:'open', off, sum:Math.round(off.reduce((s,x)=>s+x.offen,0)*100)/100, seit:off[0].monat};
+}
+function zahlungsZelle(o,e){
+  const z=zahlungsStatus(o,e);
+  if(z.kind==='nodata') return '<span class="mut">–</span>';
+  if(z.kind==='noacct') return '<span class="badge b-mut" title="Für dieses Objekt sind keine Kontoumsätze importiert">Konto fehlt</span>';
+  if(z.kind==='paid') return '<span class="badge b-good">bezahlt</span>';
+  const teil=z.off.some(x=>x.ist>0);
+  return `<span class="badge b-${teil&&z.off.length===1?'warn':'bad'}">${EUR2(z.sum)} offen</span><br>
+  <span class="mut">seit ${monatName(z.seit)}${z.off.length>1?` · ${z.off.length} Monate`:''}</span><br>
+  <button class="btn small" style="margin-top:3px" data-brief='{"kind":"mahn","id":"${e.id}"}'>✉ Erinnerung</button>`;
 }
 function textDialog(titel, text){
   document.getElementById('txtT').textContent=titel;
@@ -422,6 +445,7 @@ function viewObjektDetail(id){
     <td>${D(e.mietbeginn)}</td>
     <td>${e.letzte_erhoehung?D(e.letzte_erhoehung.datum)+`<br><span class="mut">${EUR(e.letzte_erhoehung.alt)} → ${EUR(e.letzte_erhoehung.neu)}</span>`:'–'}</td>
     <td><span class="badge b-${c.ampel}">${esc(c.status)}</span>${c.potenzial?`<br><span class="mut">+${EUR(c.potenzial)} mögl.</span>`:''}</td>
+    <td>${zahlungsZelle(o,e)}</td>
     <td style="white-space:nowrap"><button class="btn small" data-ics='${JSON.stringify(remind).replace(/'/g,"&#39;")}'>⏰</button>
     <button class="btn small" title="Mieterhöhungs-Schreiben erstellen" data-brief='{"kind":"erh","id":"${e.id}"}'>✉ Erhöhung</button></td></tr>`;
   }).join('');
@@ -439,7 +463,8 @@ function viewObjektDetail(id){
     <div class="kpi"><div class="l">Rate / Monat</div><div class="v">${EUR(Math.round(f.rate||0))}</div><div class="d">${f.zinsbindung_ende?'Zinsbindung bis '+D(f.zinsbindung_ende):''}</div></div>
   </div>
   <div class="card"><h3>Einheiten &amp; Mieter</h3>
-  <div style="overflow-x:auto"><table><thead><tr><th>Einheit / Mieter</th><th class="num">Fläche</th><th class="num">Kalt</th><th class="num">Warm</th><th>Beginn</th><th>Letzte Erhöhung</th><th>Mietspiegel</th><th></th></tr></thead><tbody>${rows}</tbody></table></div></div>
+  <div style="overflow-x:auto"><table><thead><tr><th>Einheit / Mieter</th><th class="num">Fläche</th><th class="num">Kalt</th><th class="num">Warm</th><th>Beginn</th><th>Letzte Erhöhung</th><th>Mietspiegel</th><th>Zahlungen</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
+  <p class="note" style="margin-top:8px">Zahlungsstatus basiert auf den unter „Bank &amp; Zahlungen" importierten Kontoumsätzen (alle Monate). „Konto fehlt" = für dieses Objekt wurden noch keine Umsätze importiert.</p></div>
   ${o.einheiten.some(e=>e.besonderheiten)?`<div class="card"><h3>Besonderheiten</h3>${o.einheiten.filter(e=>e.besonderheiten).map(e=>`<p class="note" style="margin:5px 0"><b>${esc(e.bezeichnung)}:</b> ${esc(e.besonderheiten)}</p>`).join('')}</div>`:''}
   ${(o.notizen||[]).length?`<div class="card"><h3>Notizen zum Objekt</h3>${o.notizen.map(n=>`<p class="note" style="margin:5px 0">• ${esc(n)}</p>`).join('')}</div>`:''}`;
 }
@@ -575,9 +600,10 @@ function detectPeriod(zweck, datum){
   const MON={januar:1,februar:2,maerz:3,'märz':3,april:4,mai:5,juni:6,juli:7,august:8,september:9,oktober:10,november:11,dezember:12};
   const base=new Date(datum); const by=base.getFullYear(), bm=base.getMonth()+1;
   const z=norm(zweck||'');
-  let m=null,y=null;
+  let m=null,y=null,pos=1e9;
   for(const name in MON){
-    if(z.includes(name)){ m=MON[name]; const ym=z.match(new RegExp(name+'\\s*(20\\d{2})')); if(ym) y=+ym[1]; break; }
+    const i=z.indexOf(name);
+    if(i>=0 && i<pos){ pos=i; m=MON[name]; const ym=z.match(new RegExp(name+'\\s*(20\\d{2})')); y=ym?+ym[1]:null; }
   }
   if(m==null){
     // nur echtes "MM/JJ(JJ)" mit Schrägstrich im Original-Zweck (nicht normalisiert, sonst wird "8,90 EUR" zu "8 90")
