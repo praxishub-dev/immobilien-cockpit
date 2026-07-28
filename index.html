@@ -403,7 +403,7 @@ function viewErinner(){
 /* ========== Bank & Zahlungen ========== */
 function viewBank(){
   const perOf = p => p.monat || p.datum?.slice(0,7);
-  const months=[...new Set(PAYMENTS.map(perOf).filter(Boolean))].sort().reverse();
+  const months=[...new Set(PAYMENTS.filter(p=>p.betrag>0).map(perOf).filter(Boolean))].sort().reverse();
   const sel = window._bankMonth && months.includes(window._bankMonth) ? window._bankMonth : months[0];
   window._bankMonth = sel;
   let body='';
@@ -495,7 +495,8 @@ function detectPeriod(zweck, datum){
     if(z.includes(name)){ m=MON[name]; const ym=z.match(new RegExp(name+'\\s*(20\\d{2})')); if(ym) y=+ym[1]; break; }
   }
   if(m==null){
-    const mm=z.match(/(?:^|[^0-9])(0?[1-9]|1[0-2])[\/ ](20\d{2}|\d{2})(?:[^0-9]|$)/);
+    // nur echtes "MM/JJ(JJ)" mit Schrägstrich im Original-Zweck (nicht normalisiert, sonst wird "8,90 EUR" zu "8 90")
+    const mm=String(zweck||'').toLowerCase().match(/(?:^|[^0-9])(0?[1-9]|1[0-2])\s*\/\s*(20\d{2}|\d{2})(?:[^0-9]|$)/);
     if(mm){ m=+mm[1]; y=mm[2].length===4?+mm[2]:2000+ +mm[2]; if(y<2020||y>2040) y=null; }
   }
   if(m==null) return fallback;
