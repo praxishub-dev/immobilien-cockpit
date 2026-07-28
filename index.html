@@ -402,12 +402,13 @@ function viewErinner(){
 }
 /* ========== Bank & Zahlungen ========== */
 function viewBank(){
-  const months=[...new Set(PAYMENTS.map(p=>p.datum?.slice(0,7)).filter(Boolean))].sort().reverse();
+  const perOf = p => p.monat || p.datum?.slice(0,7);
+  const months=[...new Set(PAYMENTS.map(perOf).filter(Boolean))].sort().reverse();
   const sel = window._bankMonth && months.includes(window._bankMonth) ? window._bankMonth : months[0];
   window._bankMonth = sel;
   let body='';
   if(sel){
-    const monthPays = PAYMENTS.filter(p=>p.datum?.slice(0,7)===sel && p.betrag>0);
+    const monthPays = PAYMENTS.filter(p=>perOf(p)===sel && p.betrag>0);
     const matched = {};
     const unmatched = [];
     monthPays.forEach(p=>{
@@ -441,7 +442,8 @@ function viewBank(){
   return `<h2>Bank &amp; Zahlungen</h2>
   <p class="sub">Kontoumsätze als CSV (Sparkasse, Commerzbank, comdirect u.a.) oder CAMT.053-XML aus dem Online-Banking exportieren und hier importieren. Zahlungen werden automatisch den Mietern zugeordnet (IBAN → Name → Betrag).</p>
   <div class="drop" id="bankDrop" style="padding:26px;margin-bottom:16px">Umsatz-Datei (CSV / CAMT-XML) hierher ziehen oder klicken
-  <input type="file" id="bankFile" accept=".csv,.xml,.txt" style="display:none" multiple></div>
+  <input type="file" id="bankFile" accept=".csv,.xml,.txt,.CSV" style="display:none" multiple></div>
+  ${window._bankMsg?`<div class="alert info" style="margin:-6px 0 14px">${esc(window._bankMsg)}</div>`:''}
   ${PAYMENTS.length?`<p class="note" style="margin:-6px 0 14px">${PAYMENTS.length} Umsätze gespeichert · <a href="#" id="clearPays">alle löschen</a></p>`:''}
   ${body}`;
 }
@@ -470,17 +472,39 @@ function importBankFile(f){
     let items=[];
     if(/^\s*<\?xml|<Document/i.test(text)) items = parseCAMT(text);
     else items = parseCSV(text);
-    if(!items.length){ alert('Keine Umsätze in "'+f.name+'" erkannt. Bitte CSV-Export des Online-Bankings oder CAMT.053-XML verwenden.'); return; }
+    if(!items.length){ window._bankMsg='⚠︎ Keine Umsätze in "'+f.name+'" erkannt. Bitte CSV-Export des Online-Bankings oder CAMT.053-XML verwenden.'; render(); return; }
     const known=new Set(PAYMENTS.map(p=>p.key));
     let added=0;
     items.forEach(p=>{ if(!known.has(p.key)){ PAYMENTS.push(p); added++; } });
     store.set('ic_payments',PAYMENTS);
     window._bankMonth=null;
-    alert(added+' neue Umsätze importiert ('+(items.length-added)+' Duplikate übersprungen).');
+    window._bankMsg='✓ '+added+' neue Umsätze aus "'+f.name+'" importiert ('+(items.length-added)+' Duplikate übersprungen).';
     render();
   });
 }
 function payKey(p){ return [p.datum,p.betrag,norm(p.name).slice(0,20),norm(p.zweck).slice(0,30)].join('|'); }
+/* Miet-Monat aus dem Verwendungszweck ableiten ("Miete Juli", "07/2026"), sonst Buchungsmonat.
+   Nur akzeptieren, wenn der erkannte Monat max. 2 Monate vom Buchungsdatum abweicht (schützt vor alten Dauerauftragstexten). */
+function detectPeriod(zweck, datum){
+  const fallback=datum.slice(0,7);
+  const MON={januar:1,februar:2,maerz:3,'märz':3,april:4,mai:5,juni:6,juli:7,august:8,september:9,oktober:10,november:11,dezember:12};
+  const base=new Date(datum); const by=base.getFullYear(), bm=base.getMonth()+1;
+  const z=norm(zweck||'');
+  let m=null,y=null;
+  for(const name in MON){
+    if(z.includes(name)){ m=MON[name]; const ym=z.match(new RegExp(name+'\\s*(20\\d{2})')); if(ym) y=+ym[1]; break; }
+  }
+  if(m==null){
+    const mm=z.match(/(?:^|[^0-9])(0?[1-9]|1[0-2])[\/ ](20\d{2}|\d{2})(?:[^0-9]|$)/);
+    if(mm){ m=+mm[1]; y=mm[2].length===4?+mm[2]:2000+ +mm[2]; if(y<2020||y>2040) y=null; }
+  }
+  if(m==null) return fallback;
+  const cands=y!=null?[y]:[by-1,by,by+1];
+  let best=null,bd=99;
+  for(const cy of cands){ const diff=Math.abs((cy*12+m)-(by*12+bm)); if(diff<bd){bd=diff;best=cy;} }
+  if(bd>2) return fallback;
+  return best+'-'+String(m).padStart(2,'0');
+}
 function parseCSV(text){
   const lines=text.split(/\r?\n/).filter(l=>l.trim());
   if(lines.length<2) return [];
@@ -488,11 +512,13 @@ function parseCSV(text){
   const split=l=>{const out=[];let cur='',q=false;for(const ch of l){if(ch==='"'){q=!q;continue}if(ch===delim&&!q){out.push(cur);cur='';}else cur+=ch;}out.push(cur);return out;};
   const trans = s => norm(s).replace(/ä/g,'ae').replace(/ö/g,'oe').replace(/ü/g,'ue').replace(/ß/g,'ss');
   const head=split(lines[0]).map(h=>trans(h));
-  // Schlüssel in Prioritätsreihenfolge suchen (erst exakte/spezifische, dann generische); exclude verhindert Fehltreffer
+  // Schlüssel in Prioritätsreihenfolge suchen: Pass 0 = exakter Spaltenname, Pass 1 = enthält; exclude verhindert Fehltreffer
   const findCol=(keys,exclude)=>{
-    for(const k of keys){
-      const i=head.findIndex(h=>h.includes(k)&&!(exclude||[]).some(x=>h.includes(x)));
-      if(i>=0) return i;
+    for(const pass of [0,1]){
+      for(const k of keys){
+        const i=head.findIndex(h=>(pass===0?h===k:h.includes(k))&&!(exclude||[]).some(x=>h.includes(x)));
+        if(i>=0) return i;
+      }
     }
     return -1;
   };
@@ -520,6 +546,7 @@ function parseCSV(text){
     if(isNaN(betrag)) continue;
     const name=((c[ci.name]||'').trim()) || ((ci.name2>=0?c[ci.name2]:'')||'').trim();
     const p={datum, betrag, name, iban:(ci.iban>=0?(c[ci.iban]||''):'').replace(/\s/g,'').toUpperCase(), zweck:(c[ci.zweck]||'').trim()};
+    p.monat=detectPeriod(p.zweck, datum);
     p.key=payKey(p); out.push(p);
   }
   return out;
@@ -535,7 +562,7 @@ function parseCAMT(text){
     const dtl = n.querySelector('NtryDtls TxDtls');
     const gd = s=>dtl?.querySelector(s)?.textContent?.trim()||'';
     const p={datum, betrag: cdt?amt:-amt, name: gd('RltdPties Dbtr Nm')||gd('Dbtr Nm'), iban: (gd('DbtrAcct Id IBAN')||'').toUpperCase(), zweck: [...(dtl?.querySelectorAll('RmtInf Ustrd')||[])].map(x=>x.textContent).join(' ')};
-    if(p.datum && !isNaN(p.betrag)){ p.key=payKey(p); out.push(p); }
+    if(p.datum && !isNaN(p.betrag)){ p.monat=detectPeriod(p.zweck, p.datum); p.key=payKey(p); out.push(p); }
   });
   return out;
 }
