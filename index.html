@@ -270,7 +270,7 @@ function briefErhoehung(o,e){
 }
 function offeneMonate(o,e){
   const perOf=p=>p.monat||p.datum?.slice(0,7);
-  const credits=PAYMENTS.filter(p=>p.betrag>0);
+  const credits=PAYMENTS.filter(p=>p.betrag>0||p.manual);
   const months=[...new Set(credits.map(perOf).filter(Boolean))].sort();
   const beginn=e.mietbeginn?e.mietbeginn.slice(0,7):null;
   const soll=warm(e);
@@ -283,7 +283,8 @@ function offeneMonate(o,e){
     if(beginn && m<beginn) continue;
     if(firstPaid && m<firstPaid) continue;
     const ist=credits.filter(p=>perOf(p)===m && matchPayment(p)===e.id).reduce((s,p)=>s+p.betrag,0);
-    if(ist+0.01<soll) out.push({monat:m, soll, ist, offen:Math.round((soll-ist)*100)/100});
+    // Toleranz 5 Cent (Rundungsdifferenzen, z.B. USt-Beträge)
+    if(ist+0.05<soll) out.push({monat:m, soll, ist, offen:Math.round((soll-ist)*100)/100});
   }
   return out;
 }
@@ -334,9 +335,10 @@ function openPayDialog(unitId){
   ${off.length?`<p class="note" style="margin:0 0 8px"><b>Offen:</b> ${off.map(x=>monatName(x.monat)+' '+EUR2(x.offen)).join(' · ')}</p>`:'<p class="note" style="margin:0 0 8px">Aktuell nichts offen.</p>'}
   <h4 style="margin:12px 0 6px">Zahlung manuell erfassen</h4>
   <div class="frow"><div><label>Monat</label><select id="payMonat">${monate.map(m=>`<option value="${m}">${monatName(m)}</option>`).join('')}</select></div>
-  <div><label>Betrag (€)</label><input type="number" step="0.01" id="payBetrag" value="${off.length?off[0].offen:warm(e)}"></div></div>
-  <label>Notiz</label><input type="text" id="payNotiz" placeholder="z.B. bar erhalten, Überweisung auf anderes Konto">
-  <div class="btnrow"><button class="btn primary" id="payAdd">Als bezahlt erfassen</button></div>
+  <div><label>Betrag (€) – negativ = Korrektur</label><input type="number" step="0.01" id="payBetrag" value="${off.length?off[0].offen:warm(e)}"></div></div>
+  <label>Notiz</label><input type="text" id="payNotiz" placeholder="z.B. bar erhalten, anderes Konto, Korrektur/Mietminderung">
+  <div class="btnrow"><button class="btn primary" id="payAdd">Buchen</button></div>
+  <p class="note" style="margin-top:4px">Positiver Betrag = als bezahlt erfassen. Negativer Betrag = Korrektur (erhöht den offenen Betrag wieder, z.B. wenn eine Zuordnung falsch war). So kannst du den offenen Betrag frei anpassen.</p>
   ${manuell.length?`<h4 style="margin:14px 0 6px">Manuelle Buchungen</h4>${manuell.map(p=>`<p class="note" style="margin:3px 0">${monatName(p.monat)} · ${EUR2(p.betrag)} ${esc(p.zweck||'')} <button class="btn small" style="color:var(--bad)" data-paydel="${esc(p.key)}">✕</button></p>`).join('')}`:''}
   <h4 style="margin:14px 0 6px">Nicht zugeordnete Kontoeingänge (${unassigned.length})</h4>
   ${unassigned.length?`<div style="max-height:180px;overflow:auto"><table><tbody>${unassigned.map(p=>`<tr><td class="mono">${D(p.datum)}</td><td>${esc(p.name||'')}<br><span class="mut">${esc((p.zweck||'').slice(0,50))}</span></td><td class="num">${EUR2(p.betrag)}</td><td><button class="btn small" data-payassign="${esc(p.key)}">→ zuordnen</button></td></tr>`).join('')}</tbody></table></div>`:'<p class="note">Keine – alle Eingänge sind zugeordnet.</p>'}`;
@@ -344,7 +346,7 @@ function openPayDialog(unitId){
     document.getElementById('payAdd').onclick=()=>{
       const betrag=parseFloat(document.getElementById('payBetrag').value);
       const monat=document.getElementById('payMonat').value;
-      if(isNaN(betrag)||betrag<=0){ alert('Bitte gültigen Betrag eingeben.'); return; }
+      if(isNaN(betrag)||betrag===0){ alert('Bitte gültigen Betrag eingeben (positiv = bezahlt, negativ = Korrektur).'); return; }
       const p={datum:isoDate(today()), betrag, name:'Manuelle Buchung', zweck:document.getElementById('payNotiz').value||('Miete '+monatName(monat)), monat, manual:true};
       p.key='man|'+e.id+'|'+monat+'|'+betrag+'|'+Math.random().toString(36).slice(2,8);
       PAYMENTS.push(p); ASSIGN['key:'+p.key]=e.id;
@@ -634,7 +636,7 @@ function viewBank(){
   window._bankMonth = sel;
   let body='';
   if(sel){
-    const monthPays = PAYMENTS.filter(p=>perOf(p)===sel && p.betrag>0);
+    const monthPays = PAYMENTS.filter(p=>perOf(p)===sel && (p.betrag>0||p.manual));
     const matched = {};
     const unmatched = [];
     monthPays.forEach(p=>{
@@ -734,10 +736,15 @@ function detectPeriod(zweck, datum){
     if(mm){ m=+mm[1]; y=mm[2].length===4?+mm[2]:2000+ +mm[2]; if(y<2020||y>2040) y=null; }
   }
   if(m==null) return fallback;
-  const cands=y!=null?[y]:[by-1,by,by+1];
-  let best=null,bd=99;
-  for(const cy of cands){ const diff=Math.abs((cy*12+m)-(by*12+bm)); if(diff<bd){bd=diff;best=cy;} }
-  if(bd>2) return fallback;
+  const probe=cands=>{
+    let best=null,bd=99;
+    for(const cy of cands){ const diff=Math.abs((cy*12+m)-(by*12+bm)); if(diff<bd){bd=diff;best=cy;} }
+    return bd<=2?best:null;
+  };
+  // Erst explizites Jahr versuchen; wenn unplausibel (z.B. Tippfehler "5/25" statt "5/26"), Jahr rund ums Buchungsdatum probieren
+  let best=y!=null?probe([y]):null;
+  if(best==null) best=probe([by-1,by,by+1]);
+  if(best==null) return fallback;
   return best+'-'+String(m).padStart(2,'0');
 }
 function parseCSV(text){
