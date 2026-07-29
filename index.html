@@ -503,7 +503,7 @@ document.querySelectorAll('nav button[data-v],#tabbar button[data-v],#moreSheet 
 })();
 function render(){
   const m=document.getElementById('main');
-  if(!DATA){ m.innerHTML=viewNoData(); wireNoData(); return; }
+  if(!DATA&&VIEW!=='conf'){ m.innerHTML=viewNoData(); wireNoData(); syncActive(); return; }
   if(VIEW==='dash') m.innerHTML=viewDash();
   else if(VIEW==='objekte'){ m.innerHTML=DETAIL?viewObjektDetail(DETAIL):viewObjekte(); if(!DETAIL) wireObjSort(); }
   else if(VIEW==='bank'){ m.innerHTML=viewBank(); wireBank(); }
@@ -564,10 +564,14 @@ function mobileTables(root){
 /* ========== Daten laden ========== */
 function viewNoData(){
   return `<h2>Willkommen im Immobilien-Cockpit</h2>
-  <p class="sub">Es sind noch keine Daten geladen. Die Objektdaten liegen aus Datenschutzgründen nicht auf GitHub, sondern bei dir lokal.</p>
-  <div class="drop" id="drop">Datei <b>immobilien-daten.json</b> hierher ziehen<br>oder klicken zum Auswählen
-  <input type="file" id="fileIn" accept=".json" style="display:none"></div>
-  <p class="note" style="margin-top:14px">Die Daten werden anschließend im Browser gespeichert (localStorage) – sie verlassen deinen Rechner nicht.</p>`;
+  <p class="sub">Es sind noch keine Daten geladen. Zwei Wege:</p>
+  <div class="card"><h3>Empfohlen: Synchronisation</h3>
+  <p class="note">Wenn auf einem anderen Gerät schon Daten liegen: einmal Token + Sync-Passwort hinterlegen, der Rest kommt automatisch.</p>
+  <div class="btnrow"><button class="btn primary" id="ndConf">Zu den Einstellungen</button></div></div>
+  <div class="card"><h3>Oder: Datendatei laden</h3>
+  <div class="drop" id="drop">Datei <b>immobilien-daten.json</b> hierher ziehen<br>oder klicken/tippen zum Auswählen
+  <input type="file" id="fileIn" accept=".json" style="display:none"></div></div>
+  <p class="note" style="margin-top:14px">Die Daten bleiben im Browser dieses Geräts (bzw. verschlüsselt im Sync) – nie öffentlich lesbar auf GitHub.</p>`;
 }
 function wireNoData(){
   const drop=document.getElementById('drop'), fi=document.getElementById('fileIn');
@@ -576,6 +580,8 @@ function wireNoData(){
   drop.addEventListener('dragleave',()=>drop.classList.remove('over'));
   drop.addEventListener('drop',e=>{e.preventDefault();drop.classList.remove('over');loadDataFile(e.dataTransfer.files[0]);});
   fi.addEventListener('change',()=>loadDataFile(fi.files[0]));
+  const nc=document.getElementById('ndConf');
+  if(nc) nc.addEventListener('click',()=>{VIEW='conf';render();});
 }
 function loadDataFile(f){
   if(!f) return;
