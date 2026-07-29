@@ -1461,6 +1461,20 @@ function scheduleSyncPush(){
   const orig=store.set.bind(store);
   store.set=(k,v)=>{ orig(k,v); if(SYNC_KEYS.includes(k)&&!SYNC_APPLYING) scheduleSyncPush(); };
 })();
+function syncMakeSetupLink(){
+  return 'https://praxishub-dev.github.io/immobilien-cockpit/#cfg='+btoa(unescape(encodeURIComponent(JSON.stringify({t:SYNCCFG.token,p:SYNCCFG.pass}))));
+}
+/* Einrichtungs-Link: #cfg=… beim Laden übernehmen (Token+Passwort automatisch setzen) */
+(function(){
+  try{
+    const m=location.hash.match(/#cfg=(.+)/);
+    if(m){
+      const cfg=JSON.parse(decodeURIComponent(escape(atob(m[1].trim()))));
+      if(cfg.t&&cfg.p){ SYNCCFG={token:cfg.t,pass:cfg.p,on:true}; store.set('ic_sync',SYNCCFG); }
+      try{ history.replaceState(null,'',location.pathname+location.search); }catch(e){}
+    }
+  }catch(e){}
+})();
 function syncInit(){
   if(!syncReady()) return;
   syncPull(false);
@@ -1535,7 +1549,9 @@ function viewConf(){
     <label style="display:flex;align-items:center;gap:8px;margin-top:10px;font-weight:400"><input type="checkbox" id="syOn" ${SYNCCFG.on?'checked':''} style="width:auto"> Automatisch synchronisieren (bei jeder Änderung hochladen, alle 30 s abrufen)</label>
     <div class="btnrow"><button class="btn primary" id="sySave">Speichern &amp; starten</button>
     <button class="btn" id="syPushBtn">Jetzt hochladen</button>
-    <button class="btn" id="syPullBtn">Jetzt abrufen</button></div>
+    <button class="btn" id="syPullBtn">Jetzt abrufen</button>
+    <button class="btn" id="syLink">Einrichtungs-Link erzeugen</button></div>
+    <p class="note" style="margin-top:6px">Einrichtungs-Link: auf einem fertig eingerichteten Gerät erzeugen und privat ans andere Gerät / den Kollegen schicken – ein Tipp auf den Link richtet dort alles automatisch ein. Achtung: Wer den Link hat, kann alle Daten lesen und ändern.</p>
     <p class="note" style="margin-top:8px">Status: <b id="syStatus">${SYNCCFG.on?'aktiv':'aus'}</b></p></div>
   <div class="card"><h3>Daten</h3>
     <div class="btnrow">
@@ -1564,10 +1580,17 @@ function wireConf(){
     store.set('ic_settings',SETTINGS); alert('Gespeichert.');
   });
   document.getElementById('sySave').addEventListener('click',()=>{
-    SYNCCFG={token:document.getElementById('syToken').value.trim(),pass:document.getElementById('syPass').value,on:document.getElementById('syOn').checked};
-    store.set('ic_sync',SYNCCFG);
-    if(syncReady()){ syncSetStatus('gestartet …'); syncInit(); if(DATA) syncPush(); else syncPull(true); }
-    else syncSetStatus(SYNCCFG.on?'unvollständig – Token und Passwort nötig':'aus');
+    try{
+      SYNCCFG={token:document.getElementById('syToken').value.trim(),pass:document.getElementById('syPass').value.trim(),on:document.getElementById('syOn').checked};
+      store.set('ic_sync',SYNCCFG);
+      if(!window.crypto?.subtle){ syncSetStatus('Fehler: Browser unterstützt keine Verschlüsselung (crypto.subtle)'); return; }
+      if(syncReady()){ syncSetStatus('gestartet …'); syncInit(); if(DATA) syncPush(); else syncPull(true); }
+      else syncSetStatus(SYNCCFG.on?'unvollständig – Token und Passwort nötig':'aus (Haken setzen)');
+    }catch(e){ syncSetStatus('Fehler: '+e.message); }
+  });
+  document.getElementById('syLink').addEventListener('click',()=>{
+    if(!SYNCCFG.token||!SYNCCFG.pass){ syncSetStatus('erst Token + Passwort speichern, dann Link erzeugen'); return; }
+    textDialog('Einrichtungs-Link (privat weitergeben!)', syncMakeSetupLink());
   });
   document.getElementById('syPushBtn').addEventListener('click',()=>{ if(syncReady()) syncPush(); else syncSetStatus('erst Token + Passwort speichern'); });
   document.getElementById('syPullBtn').addEventListener('click',()=>{ if(syncReady()) syncPull(true); else syncSetStatus('erst Token + Passwort speichern'); });
