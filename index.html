@@ -1552,6 +1552,8 @@ function viewConf(){
     <button class="btn" id="syPullBtn">Jetzt abrufen</button>
     <button class="btn" id="syLink">Einrichtungs-Link erzeugen</button></div>
     <p class="note" style="margin-top:6px">Einrichtungs-Link: auf einem fertig eingerichteten Gerät erzeugen und privat ans andere Gerät / den Kollegen schicken – ein Tipp auf den Link richtet dort alles automatisch ein. Achtung: Wer den Link hat, kann alle Daten lesen und ändern.</p>
+    <label>Oder erhaltenen Einrichtungs-Link hier einfügen</label>
+    <div class="frow"><div><input type="text" id="syLinkIn" placeholder="https://…#cfg=…"></div><div style="flex:0 0 auto"><button class="btn primary" id="syLinkApply">Übernehmen</button></div></div>
     <p class="note" style="margin-top:8px">Status: <b id="syStatus">${SYNCCFG.on?'aktiv':'aus'}</b></p></div>
   <div class="card"><h3>Daten</h3>
     <div class="btnrow">
@@ -1586,6 +1588,17 @@ function wireConf(){
       if(!window.crypto?.subtle){ syncSetStatus('Fehler: Browser unterstützt keine Verschlüsselung (crypto.subtle)'); return; }
       if(syncReady()){ syncSetStatus('gestartet …'); syncInit(); if(DATA) syncPush(); else syncPull(true); }
       else syncSetStatus(SYNCCFG.on?'unvollständig – Token und Passwort nötig':'aus (Haken setzen)');
+    }catch(e){ syncSetStatus('Fehler: '+e.message); }
+  });
+  document.getElementById('syLinkApply').addEventListener('click',()=>{
+    try{
+      const m=(document.getElementById('syLinkIn').value||'').match(/#cfg=([A-Za-z0-9+/=]+)/);
+      if(!m){ syncSetStatus('Kein gültiger Einrichtungs-Link.'); return; }
+      const cfg=JSON.parse(decodeURIComponent(escape(atob(m[1]))));
+      if(!cfg.t||!cfg.p){ syncSetStatus('Link unvollständig.'); return; }
+      SYNCCFG={token:cfg.t,pass:cfg.p,on:true}; store.set('ic_sync',SYNCCFG);
+      syncSetStatus('eingerichtet – hole Daten …'); syncInit(); syncPull(true);
+      setTimeout(render,2500);
     }catch(e){ syncSetStatus('Fehler: '+e.message); }
   });
   document.getElementById('syLink').addEventListener('click',()=>{
