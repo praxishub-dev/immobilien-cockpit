@@ -1344,6 +1344,112 @@ function wireRechner(){
   });
   rcUpdate();
 }
+/* ========== Verschlüsselte Geräte-Synchronisation über GitHub ==========
+   Daten werden mit AES-GCM (Passwort → PBKDF2) verschlüsselt und als sync.dat
+   im Repo abgelegt. Auf GitHub liegt nur unlesbarer Ciphertext.
+   Konfiguration (Token + Passwort) bleibt gerätelokal in ic_sync. */
+const SYNC_KEYS=['ic_data','ic_payments','ic_assign','ic_order','ic_dismissed','ic_rechner'];
+const SYNC_REPO='praxishub-dev/immobilien-cockpit';
+const SYNC_FILE='sync.dat';
+let SYNCCFG=store.get('ic_sync')||{token:'',pass:'',on:false};
+let SYNC_APPLYING=false, syncTimer=null, syncBusy=false;
+let lastSyncTs=store.get('ic_sync_ts')||0;
+let syncStatus='aus';
+
+function syncSetStatus(s){
+  syncStatus=s;
+  const el=document.getElementById('syStatus'); if(el) el.textContent=s;
+  const dot=document.getElementById('syDot');
+  if(dot) dot.style.background = /Fehler|Passwort/.test(s)?'var(--bad)':(/synchron/.test(s)?'var(--good)':'var(--ink-3)');
+}
+function syncReady(){ return SYNCCFG.on&&SYNCCFG.token&&SYNCCFG.pass&&window.crypto?.subtle; }
+async function syncKey(salt){
+  const enc=new TextEncoder();
+  const base=await crypto.subtle.importKey('raw',enc.encode(SYNCCFG.pass),'PBKDF2',false,['deriveKey']);
+  return crypto.subtle.deriveKey({name:'PBKDF2',salt,iterations:150000,hash:'SHA-256'},base,{name:'AES-GCM',length:256},false,['encrypt','decrypt']);
+}
+const b64=a=>btoa(String.fromCharCode(...new Uint8Array(a)));
+const unb64=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
+async function syncEncrypt(obj){
+  const salt=crypto.getRandomValues(new Uint8Array(16)), iv=crypto.getRandomValues(new Uint8Array(12));
+  const key=await syncKey(salt);
+  const ct=await crypto.subtle.encrypt({name:'AES-GCM',iv},key,new TextEncoder().encode(JSON.stringify(obj)));
+  return JSON.stringify({v:1,salt:b64(salt),iv:b64(iv),ct:b64(ct)});
+}
+async function syncDecrypt(raw){
+  const p=JSON.parse(raw);
+  const key=await syncKey(unb64(p.salt));
+  const pt=await crypto.subtle.decrypt({name:'AES-GCM',iv:unb64(p.iv)},key,unb64(p.ct));
+  return JSON.parse(new TextDecoder().decode(pt));
+}
+function syncHeaders(){ return {'Authorization':'Bearer '+SYNCCFG.token,'Accept':'application/vnd.github+json'}; }
+async function syncGetRemote(){
+  const r=await fetch(`https://api.github.com/repos/${SYNC_REPO}/contents/${SYNC_FILE}?ref=main&_=${Date.now()}`,{headers:syncHeaders(),cache:'no-store'});
+  if(r.status===404) return {sha:null,raw:null};
+  if(!r.ok) throw new Error('GitHub '+r.status);
+  const j=await r.json();
+  return {sha:j.sha, raw:new TextDecoder().decode(unb64(j.content.replace(/\n/g,'')))};
+}
+async function syncPush(){
+  if(!syncReady()||syncBusy) return;
+  syncBusy=true; syncSetStatus('lade hoch …');
+  try{
+    const state={ts:Date.now(),data:{}};
+    SYNC_KEYS.forEach(k=>state.data[k]=store.get(k));
+    const body=await syncEncrypt(state);
+    for(let att=0;att<2;att++){
+      const {sha}=await syncGetRemote();
+      const put=await fetch(`https://api.github.com/repos/${SYNC_REPO}/contents/${SYNC_FILE}`,{method:'PUT',headers:syncHeaders(),
+        body:JSON.stringify({message:'sync',content:btoa(unescape(encodeURIComponent(body))),...(sha?{sha}:{}),branch:'main'})});
+      if(put.ok){ lastSyncTs=state.ts; store.set('ic_sync_ts',lastSyncTs); syncSetStatus('synchron ('+new Date().toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'})+')'); syncBusy=false; return; }
+      if(put.status!==409){ throw new Error('GitHub '+put.status); }
+    }
+    throw new Error('Konflikt');
+  }catch(e){ syncSetStatus('Fehler: '+e.message); }
+  syncBusy=false;
+}
+async function syncPull(manual){
+  if(!syncReady()||syncBusy) return;
+  // nicht mitten in einer Eingabe den Bildschirm neu aufbauen
+  if(!manual&&document.activeElement&&/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) return;
+  syncBusy=true;
+  try{
+    const {raw}=await syncGetRemote();
+    if(raw){
+      let state;
+      try{ state=await syncDecrypt(raw); }
+      catch(e){ syncSetStatus('Passwort falsch? Entschlüsselung fehlgeschlagen.'); syncBusy=false; return; }
+      if(state.ts>lastSyncTs){
+        SYNC_APPLYING=true;
+        SYNC_KEYS.forEach(k=>{ if(state.data[k]!=null) store.set(k,state.data[k]); else store.del(k); });
+        DATA=store.get('ic_data'); PAYMENTS=store.get('ic_payments')||[]; ASSIGN=store.get('ic_assign')||{};
+        if(typeof RS_!=='undefined'&&state.data.ic_rechner) RS_=state.data.ic_rechner;
+        SYNC_APPLYING=false;
+        lastSyncTs=state.ts; store.set('ic_sync_ts',lastSyncTs);
+        syncSetStatus('synchron ('+new Date().toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'})+')');
+        render();
+      } else if(manual){ syncSetStatus('synchron – kein neuerer Stand.'); }
+    } else if(manual){ syncSetStatus('Noch kein Sync-Stand auf GitHub – zuerst auf dem Gerät mit den Daten „Jetzt hochladen" drücken.'); }
+  }catch(e){ syncSetStatus('Fehler: '+e.message); }
+  syncBusy=false;
+}
+function scheduleSyncPush(){
+  if(!syncReady()) return;
+  clearTimeout(syncTimer);
+  syncTimer=setTimeout(syncPush,3500);
+}
+/* store.set abfangen: jede Datenänderung löst (entprellt) einen Push aus */
+(function(){
+  const orig=store.set.bind(store);
+  store.set=(k,v)=>{ orig(k,v); if(SYNC_KEYS.includes(k)&&!SYNC_APPLYING) scheduleSyncPush(); };
+})();
+function syncInit(){
+  if(!syncReady()) return;
+  syncPull(false);
+  setInterval(()=>syncPull(false),30000);
+  window.addEventListener('focus',()=>syncPull(false));
+  document.addEventListener('visibilitychange',()=>{ if(!document.hidden) syncPull(false); });
+}
 /* ========== KI-Fragen (Claude API) ========== */
 let CHAT=[];
 function viewKI(){
@@ -1404,6 +1510,15 @@ function viewConf(){
     </select>
     <div class="btnrow"><button class="btn primary" id="cfSave">Speichern</button></div>
     <p class="note" style="margin-top:10px">Key erstellen: <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com</a>. Der Key wird nur im Browser gespeichert und direkt an die Anthropic-API gesendet.</p></div>
+  <div class="card"><h3><span id="syDot" style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${SYNCCFG.on?'var(--good)':'var(--ink-3)'};margin-right:6px"></span>Geräte-Synchronisation</h3>
+    <p class="note">Gleicht alle Daten (Objekte, Zahlungen, Eingaben) automatisch zwischen Handy und Rechner ab – verschlüsselt über GitHub. Auf GitHub liegt nur unlesbarer Ciphertext; Token und Passwort bleiben auf diesem Gerät. Auf jedem Gerät einmal identisch einrichten.</p>
+    <div class="frow"><div><label>GitHub-Token</label><input type="password" id="syToken" value="${esc(SYNCCFG.token)}" placeholder="github_pat_…"></div>
+    <div><label>Sync-Passwort (frei wählbar, überall gleich)</label><input type="password" id="syPass" value="${esc(SYNCCFG.pass)}" placeholder="mind. 8 Zeichen"></div></div>
+    <label style="display:flex;align-items:center;gap:8px;margin-top:10px;font-weight:400"><input type="checkbox" id="syOn" ${SYNCCFG.on?'checked':''} style="width:auto"> Automatisch synchronisieren (bei jeder Änderung hochladen, alle 30 s abrufen)</label>
+    <div class="btnrow"><button class="btn primary" id="sySave">Speichern &amp; starten</button>
+    <button class="btn" id="syPushBtn">Jetzt hochladen</button>
+    <button class="btn" id="syPullBtn">Jetzt abrufen</button></div>
+    <p class="note" style="margin-top:8px">Status: <b id="syStatus">${SYNCCFG.on?'aktiv':'aus'}</b></p></div>
   <div class="card"><h3>Daten</h3>
     <div class="btnrow">
       <button class="btn" id="cfLoad">Neue Datendatei laden</button>
@@ -1430,6 +1545,14 @@ function wireConf(){
     SETTINGS.model=document.getElementById('cfModel').value;
     store.set('ic_settings',SETTINGS); alert('Gespeichert.');
   });
+  document.getElementById('sySave').addEventListener('click',()=>{
+    SYNCCFG={token:document.getElementById('syToken').value.trim(),pass:document.getElementById('syPass').value,on:document.getElementById('syOn').checked};
+    store.set('ic_sync',SYNCCFG);
+    if(syncReady()){ syncSetStatus('gestartet …'); syncInit(); if(DATA) syncPush(); else syncPull(true); }
+    else syncSetStatus(SYNCCFG.on?'unvollständig – Token und Passwort nötig':'aus');
+  });
+  document.getElementById('syPushBtn').addEventListener('click',()=>{ if(syncReady()) syncPush(); else syncSetStatus('erst Token + Passwort speichern'); });
+  document.getElementById('syPullBtn').addEventListener('click',()=>{ if(syncReady()) syncPull(true); else syncSetStatus('erst Token + Passwort speichern'); });
   document.getElementById('cfLoad').addEventListener('click',()=>document.getElementById('cfFile').click());
   document.getElementById('cfFile').addEventListener('change',e=>loadDataFile(e.target.files[0]));
   document.getElementById('cfExport').addEventListener('click',()=>{
@@ -1504,6 +1627,8 @@ document.addEventListener('DOMContentLoaded',()=>{
   });
   render();
   fetchMarktdaten();
+  setInterval(fetchMarktdaten,10*60*1000);   // Marktdaten alle 10 Min. prüfen
+  syncInit();                                 // Geräte-Sync (falls konfiguriert)
 });
 </script>
 </body>
