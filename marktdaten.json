@@ -1,0 +1,8 @@
+{
+ "stand": "2026-07-29",
+ "bundesweit": {
+  "trend_pa": 2.3,
+  "quelle": "vdp-Immobilienpreisindex Q1 2026 (Wohnen +2,3 %; MFH +2,2 %); Prognose 2026 Dr. Klein ~+3 %"
+ },
+ "hinweis": "Regionalwerte = immowelt-Angebotspreis-Schätzungen (keine amtlichen Indizes für Kleinstädte); gewichtetes Mittel aus ETW/EFH-Veränderung ggü. Vorjahr. Wertsteigerungssätze je Objekt anpassbar. Automatisches Update alle 2 Tage."
+}

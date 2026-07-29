@@ -1039,6 +1039,22 @@ function wireVermoegen(){
     store.set('ic_data',DATA); render();
   });
 }
+/* ---- Marktdaten-Auto-Update: holt marktdaten.json von GitHub (wird alle 2 Tage per Cloud-Task aktualisiert) ---- */
+async function fetchMarktdaten(){
+  try{
+    if(!DATA) return;
+    const r=await fetch('https://praxishub-dev.github.io/immobilien-cockpit/marktdaten.json?_='+Date.now(),{cache:'no-store'});
+    if(!r.ok) return;
+    const m=await r.json();
+    if(!m||!m.stand||!m.bundesweit) return;
+    const cur=DATA.meta?.marktinfos;
+    if(cur&&cur.stand===m.stand) return;
+    DATA.meta=DATA.meta||{};
+    DATA.meta.marktinfos=m;
+    store.set('ic_data',DATA);
+    if(VIEW==='verkauf') render();
+  }catch(e){/* offline o.ä. – letzter Stand bleibt */}
+}
 function wireVerkauf(){
   const btn=document.getElementById('vkSave'); if(!btn) return;
   btn.addEventListener('click',()=>{
@@ -1399,6 +1415,7 @@ document.addEventListener('DOMContentLoaded',()=>{
     dlg.close();
   });
   render();
+  fetchMarktdaten();
 });
 </script>
 </body>
