@@ -136,7 +136,7 @@ function addMonths(d, m){ const x=new Date(d); x.setMonth(x.getMonth()+m); retur
 function isoDate(d){ return d.toISOString().slice(0,10); }
 function allUnits(){ const u=[]; (DATA?.objekte||[]).forEach(o=>o.einheiten.forEach(e=>u.push({o,e}))); return u; }
 function unitById(id){ return allUnits().find(x=>x.e.id===id); }
-function warm(e){ return (e.kaltmiete||0)+(e.nk||0)+(e.hk||0); }
+function warm(e){ return (e.kaltmiete||0)+(e.nk||0)+(e.hk||0)+(e.ust||0); }
 function mietspiegelOf(ort){ return (DATA?.mietspiegel||[]).find(m=>m.ort===ort); }
 
 /* ========== Mietspiegel- & Erhöhungslogik (§558/§557b BGB, vereinfacht) ========== */
