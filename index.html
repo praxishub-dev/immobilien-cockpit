@@ -75,7 +75,9 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
 .chart .bar span{position:absolute;left:calc(100% + 6px);top:-1px;font-size:11px;color:var(--ink-2);font-variant-numeric:tabular-nums;white-space:nowrap}
 .legend{display:flex;gap:16px;font-size:12.5px;color:var(--ink-2);margin:4px 0 10px}
 .legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px}
-.alert{border-left:3px solid var(--bad);background:var(--bad-bg);padding:9px 12px;border-radius:0 8px 8px 0;margin:6px 0;font-size:13.5px}
+.alert{border-left:3px solid var(--bad);background:var(--bad-bg);padding:9px 34px 9px 12px;border-radius:0 8px 8px 0;margin:6px 0;font-size:13.5px;position:relative}
+.alert .ax{position:absolute;right:6px;top:5px;border:0;background:none;color:inherit;opacity:.55;font-size:16px;font-weight:700;cursor:pointer;padding:2px 6px;line-height:1}
+.alert .ax:hover{opacity:1}
 .alert.warn{border-color:var(--warn);background:var(--warn-bg)}
 .alert.info{border-color:var(--s1);background:var(--info-bg)}
 .note{font-size:12.5px;color:var(--ink-2)}
@@ -527,6 +529,13 @@ function render(){
     if(b.kind==='erh') textDialog('Mieterhöhung: '+u.e.bezeichnung, briefErhoehung(u.o,u.e));
     else textDialog('Zahlungserinnerung: '+u.e.bezeichnung, briefMahnung(u.o,u.e));
   }));
+  m.querySelectorAll('[data-alertoff]').forEach(el=>el.addEventListener('click',ev=>{
+    ev.stopPropagation();
+    const d=store.get('ic_alerts_off')||[];
+    if(!d.includes(el.dataset.alertoff)) d.push(el.dataset.alertoff);
+    store.set('ic_alerts_off',d); render();
+  }));
+  m.querySelectorAll('[data-alertreset]').forEach(el=>el.addEventListener('click',()=>{ store.set('ic_alerts_off',[]); render(); }));
   // Mobil: Tabellen zu gestapelten Karten umbauen (kein horizontales Scrollen)
   if(window.innerWidth<=840) mobileTables(m);
   // Desktop-Fallback: Tabellen scrollbar einpacken
@@ -603,6 +612,9 @@ function viewDash(){
     (o.notizen||[]).forEach(n=>{ if(/ACHTUNG|WICHTIG|Räumung|umstellen/i.test(n)) alerts.push({o,n,bad:/ACHTUNG|Räumung/i.test(n)}); });
     o.einheiten.forEach(e=>{ if(/ACHTUNG|Räumung|keine Mietzahlungen/i.test(e.besonderheiten||'')) alerts.push({o,n:e.bezeichnung+': '+e.besonderheiten,bad:true}); });
   });
+  const offA=store.get('ic_alerts_off')||[];
+  const aKey=a=>a.o.name+'|'+a.n;
+  const visAlerts=alerts.filter(a=>!offA.includes(aKey(a)));
   const potenzial=units.reduce((s,{o,e})=>s+mietCheck(o,e).potenzial,0);
   const maxV=Math.max(...DATA.objekte.map(o=>Math.max(o.einheiten.reduce((s,e)=>s+(e.kaltmiete||0),0),o.finanzierung?.rate||0)));
   const chart=DATA.objekte.map(o=>{
@@ -618,9 +630,9 @@ function viewDash(){
     <div class="kpi"><div class="l">Kapitaldienst / Monat</div><div class="v">${EUR(Math.round(rate))}</div><div class="d">Summe aller Raten</div></div>
     <div class="kpi"><div class="l">Cashflow (kalt − Rate)</div><div class="v" style="color:${cf>=0?'var(--good)':'var(--bad)'}">${cf>=0?'+':''}${EUR(Math.round(cf))}</div><div class="d">vor NK, Steuern, Rücklagen</div></div>
     <div class="kpi"><div class="l">Mieterhöhungs-Potenzial</div><div class="v">+${EUR(potenzial)}</div><div class="d">pro Monat, s. Mietspiegel-Check</div></div>
-    <div class="kpi"><div class="l">Warnungen</div><div class="v" style="color:${alerts.length?'var(--bad)':'var(--good)'}">${alerts.length}</div><div class="d">offene Punkte</div></div>
+    <div class="kpi"><div class="l">Warnungen</div><div class="v" style="color:${visAlerts.length?'var(--bad)':'var(--good)'}">${visAlerts.length}</div><div class="d">offene Punkte</div></div>
   </div>
-  ${alerts.length?`<div class="card"><h3>Handlungsbedarf</h3>${alerts.map(a=>`<div class="alert${a.bad?'':' warn'}"><b>${esc(a.o.name)}:</b> ${esc(a.n)}</div>`).join('')}</div>`:''}
+  ${visAlerts.length?`<div class="card"><h3>Handlungsbedarf</h3>${visAlerts.map(a=>`<div class="alert${a.bad?'':' warn'}"><button class="ax" data-alertoff="${esc(aKey(a))}" title="Ausblenden">×</button><b>${esc(a.o.name)}:</b> ${esc(a.n)}</div>`).join('')}${offA.length?`<p class="note" style="margin:8px 0 0"><span class="backlink" data-alertreset>${offA.length} ausgeblendete Warnung(en) wiederherstellen</span></p>`:''}</div>`:(offA.length?`<div class="card"><p class="note" style="margin:0"><span class="backlink" data-alertreset>${offA.length} ausgeblendete Warnung(en) wiederherstellen</span></p></div>`:'')}
   <div class="card"><h3>Kaltmiete vs. Rate je Objekt</h3>
     <div class="legend"><span><i style="background:var(--s1)"></i>Kaltmiete</span><span><i style="background:var(--s2)"></i>Darlehensrate</span></div>
     <div class="chart">${chart}</div></div>`;
@@ -1354,7 +1366,7 @@ function wireRechner(){
    Daten werden mit AES-GCM (Passwort → PBKDF2) verschlüsselt und als sync.dat
    im Repo abgelegt. Auf GitHub liegt nur unlesbarer Ciphertext.
    Konfiguration (Token + Passwort) bleibt gerätelokal in ic_sync. */
-const SYNC_KEYS=['ic_data','ic_payments','ic_assign','ic_order','ic_dismissed','ic_rechner'];
+const SYNC_KEYS=['ic_data','ic_payments','ic_assign','ic_order','ic_dismissed','ic_rechner','ic_alerts_off'];
 const SYNC_REPO='praxishub-dev/immobilien-cockpit';
 const SYNC_FILE='sync.dat';
 let SYNCCFG=store.get('ic_sync')||{token:'',pass:'',on:false};
