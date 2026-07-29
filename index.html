@@ -101,25 +101,39 @@ dialog::backdrop{background:rgba(10,10,8,.35)}
 .right{text-align:right}
 .mono{font-variant-numeric:tabular-nums}
 .backlink{font-size:13px;margin-bottom:12px;display:inline-block;cursor:pointer;color:var(--s1)}
+#mobHead{display:none}
+#tabbar{display:none}
+#moreSheet{display:none}
 @media(max-width:840px){
+html,body{overflow-x:hidden}
 #app{flex-direction:column}
-nav{width:100%;height:auto;position:sticky;top:0;z-index:50;display:flex;flex-wrap:nowrap;overflow-x:auto;gap:4px;padding:8px;border-bottom:1px solid var(--border);-webkit-overflow-scrolling:touch}
-nav h1{display:none}
-nav button{width:auto;flex-shrink:0;padding:8px 12px;font-size:13px;white-space:nowrap}
-main{padding:12px;max-width:100%}
-h2{font-size:18px}
+nav{display:none}
+#mobHead{display:flex;align-items:baseline;gap:8px;position:sticky;top:0;z-index:60;background:rgba(244,243,240,.94);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border-bottom:1px solid var(--border);padding:calc(10px + env(safe-area-inset-top)) 16px 10px}
+#mobHead b{font-size:15.5px;letter-spacing:-.2px}
+#mobHead span{font-size:11px;color:var(--ink-3)}
+main{padding:14px 12px calc(84px + env(safe-area-inset-bottom));max-width:100%}
+h2{font-size:19px}
+.sub{margin-bottom:14px}
 .kpis{grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px}
 .kpi{padding:10px 12px}.kpi .v{font-size:17px}
 .card{padding:12px}
-table{font-size:12px}
-th,td{padding:5px 6px}
-.chart .crow{grid-template-columns:110px 1fr}
+table{font-size:12.5px}
+th,td{padding:6px}
+.twrap{overflow-x:auto;-webkit-overflow-scrolling:touch;max-width:100%}
+.chart .crow{grid-template-columns:104px 1fr}
 .btn{padding:6px 10px;font-size:12.5px}
 .frow{flex-wrap:wrap}
 .obj-grid{grid-template-columns:1fr}
-dialog{padding:14px}
-.pill-tabs{overflow-x:auto;flex-wrap:nowrap}
+dialog{padding:14px;width:min(480px,94vw)}
+.pill-tabs{overflow-x:auto;flex-wrap:nowrap;-webkit-overflow-scrolling:touch}
 #rcPaneE{grid-template-columns:1fr!important}
+#tabbar{display:flex;position:fixed;bottom:0;left:0;right:0;z-index:100;background:rgba(252,252,251,.95);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-top:1px solid var(--border);padding:6px 4px calc(6px + env(safe-area-inset-bottom))}
+#tabbar button{flex:1;display:flex;flex-direction:column;align-items:center;gap:1px;border:0;background:none;font-size:19px;line-height:1.2;color:var(--ink-3);font-family:inherit;padding:3px 0;cursor:pointer}
+#tabbar button span{font-size:10px;font-weight:600;letter-spacing:.1px}
+#tabbar button.active{color:var(--s1)}
+#moreSheet.open{display:grid;position:fixed;left:10px;right:10px;bottom:calc(64px + env(safe-area-inset-bottom));z-index:99;background:#fff;border:1px solid var(--border);border-radius:16px;box-shadow:0 10px 34px rgba(0,0,0,.18);padding:10px;grid-template-columns:1fr 1fr;gap:7px}
+#moreSheet button{display:flex;align-items:center;gap:8px;border:1px solid var(--border);background:#fff;border-radius:10px;padding:12px 10px;font-size:13.5px;font-family:inherit;color:var(--ink);cursor:pointer;text-align:left}
+#moreSheet button.active{border-color:var(--s1);color:var(--s1);font-weight:600;background:var(--info-bg)}
 }
 @media print{nav{display:none}}
 </style>
@@ -139,7 +153,25 @@ dialog{padding:14px}
   <button data-v="rechner"><span class="icon">🧮</span>Immobilien-Rechner</button>
   <button data-v="conf"><span class="icon">⚙</span>Einstellungen</button>
 </nav>
+<div style="flex:1;min-width:0;display:flex;flex-direction:column">
+<header id="mobHead"><b>Immobilien-Cockpit</b><span>Specht &amp; Waschkowski</span></header>
 <main id="main"></main>
+</div>
+</div>
+<div id="moreSheet">
+  <button data-v="miet"><span class="icon">↗</span>Mietspiegel-Check</button>
+  <button data-v="verkauf"><span class="icon">🏷</span>Verkauf</button>
+  <button data-v="vermoegen"><span class="icon">📈</span>Vermögensaufbau</button>
+  <button data-v="ki"><span class="icon">✦</span>KI-Fragen</button>
+  <button data-v="rechner"><span class="icon">🧮</span>Immobilien-Rechner</button>
+  <button data-v="conf"><span class="icon">⚙</span>Einstellungen</button>
+</div>
+<div id="tabbar">
+  <button data-v="dash" class="active">◫<span>Übersicht</span></button>
+  <button data-v="objekte">⌂<span>Objekte</span></button>
+  <button data-v="bank">€<span>Bank</span></button>
+  <button data-v="erinner">⏰<span>Termine</span></button>
+  <button id="tbMore" type="button">☰<span>Mehr</span></button>
 </div>
 <script>
 /* ========== Storage (mit Fallback, falls localStorage nicht verfügbar) ========== */
@@ -440,11 +472,25 @@ function textDialog(titel, text){
 
 /* ========== Router ========== */
 let VIEW='dash', DETAIL=null;
-document.querySelectorAll('nav button').forEach(b=>b.addEventListener('click',()=>{
+function syncActive(){
+  const more=['miet','verkauf','vermoegen','ki','rechner','conf'];
+  document.querySelectorAll('nav button[data-v],#tabbar button[data-v],#moreSheet button[data-v]').forEach(x=>x.classList.toggle('active',x.dataset.v===VIEW));
+  const mb=document.getElementById('tbMore'); if(mb) mb.classList.toggle('active',more.includes(VIEW));
+}
+document.querySelectorAll('nav button[data-v],#tabbar button[data-v],#moreSheet button[data-v]').forEach(b=>b.addEventListener('click',()=>{
   VIEW=b.dataset.v; DETAIL=null;
-  document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('active',x===b));
-  render();
+  const ms=document.getElementById('moreSheet'); if(ms) ms.classList.remove('open');
+  render(); window.scrollTo(0,0);
 }));
+(function(){
+  const tb=document.getElementById('tbMore'), ms=document.getElementById('moreSheet');
+  if(tb&&ms){
+    tb.addEventListener('click',()=>ms.classList.toggle('open'));
+    document.addEventListener('click',e=>{
+      if(ms.classList.contains('open')&&!ms.contains(e.target)&&!e.target.closest('#tbMore')) ms.classList.remove('open');
+    });
+  }
+})();
 function render(){
   const m=document.getElementById('main');
   if(!DATA){ m.innerHTML=viewNoData(); wireNoData(); return; }
@@ -471,6 +517,13 @@ function render(){
     if(b.kind==='erh') textDialog('Mieterhöhung: '+u.e.bezeichnung, briefErhoehung(u.o,u.e));
     else textDialog('Zahlungserinnerung: '+u.e.bezeichnung, briefMahnung(u.o,u.e));
   }));
+  // Tabellen scrollbar einpacken (verhindert seitliches Verschieben der ganzen Seite auf dem Handy)
+  m.querySelectorAll('table').forEach(t=>{
+    const p=t.parentElement;
+    if(p&&(p.classList.contains('twrap')||/overflow/.test(p.getAttribute('style')||''))) return;
+    const w=document.createElement('div'); w.className='twrap'; t.parentNode.insertBefore(w,t); w.appendChild(t);
+  });
+  syncActive();
 }
 
 /* ========== Daten laden ========== */
