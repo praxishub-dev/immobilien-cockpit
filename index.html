@@ -923,27 +923,32 @@ function tilgung10J(o){
 }
 function viewVermoegen(){
   const st=DATA.meta?.steuersatz??42;
-  let sumA=0,sumT=0,sumA10=0,sumT10=0;
+  let sumA=0,sumT=0,sumA10=0,sumT10=0,sumW=0,sumW10=0;
   const rows=orderedObjekte().map(o=>{
     const v=o.vermoegen||{};
     const afa=v.afa_jahr;
     const tj=tilgungJahr(o);
     const t10=tilgung10J(o);
     const a10=afa!=null?afa*10:null;
-    if(afa)sumA+=afa; if(tj)sumT+=tj; if(a10)sumA10+=a10; if(t10)sumT10+=t10;
+    const wp=v.wertzuwachs_pa??1.5;
+    const wj=o.kaufpreis?o.kaufpreis*wp/100:null;
+    const w10=o.kaufpreis?o.kaufpreis*(Math.pow(1+wp/100,10)-1):null;
+    if(afa)sumA+=afa; if(tj)sumT+=tj; if(a10)sumA10+=a10; if(t10)sumT10+=t10; if(wj)sumW+=wj; if(w10)sumW10+=w10;
     return `<tr><td><b>${esc(o.name)}</b><br><span class="mut">${esc(v.afa_quelle||'')}</span></td>
     <td class="num"><input type="number" step="100" style="width:90px;padding:3px 6px;font-size:12px" data-afa="${o.id}" value="${afa??''}" placeholder="AfA €"></td>
     <td class="num">${tj!=null?EUR(Math.round(tj)):'–'}</td>
+    <td class="num"><input type="number" step="0.1" style="width:60px;padding:3px 6px;font-size:12px" data-wz="${o.id}" value="${wp}"> %<br><span class="mut">${wj!=null?'≈ '+EUR(Math.round(wj))+'/J.':''}</span></td>
     <td class="num">${a10!=null?`<b>${EUR(Math.round(a10))}</b><br><span class="mut">Steuerersparnis ~${EUR(Math.round(a10*st/100))}</span>`:'–'}</td>
-    <td class="num">${t10!=null?`<b>${EUR(Math.round(t10))}</b>`:'–'}</td></tr>`;
+    <td class="num">${t10!=null?`<b>${EUR(Math.round(t10))}</b>`:'–'}</td>
+    <td class="num">${w10!=null?`<b>${EUR(Math.round(w10))}</b>`:'–'}</td></tr>`;
   }).join('');
   return `<h2>Vermögensaufbau</h2>
-  <p class="sub">Vermögenszuwachs aus Abschreibung (Steuereffekt) und Entschuldung (Tilgung) – bewusst ohne Miet-Cashflow. Grenzsteuersatz für die Steuerersparnis: <input type="number" step="1" style="width:60px;padding:3px 6px" id="vmSteuer" value="${st}"> %</p>
-  <div class="card"><div style="overflow-x:auto"><table><thead><tr><th>Objekt</th><th class="num">AfA / Jahr</th><th class="num">Tilgung / Jahr<br><span style="font-weight:400">(anfänglich)</span></th><th class="num">AfA kumuliert 10 J.</th><th class="num">Tilgung kumuliert 10 J.<br><span style="font-weight:400">(Annuitätsverlauf)</span></th></tr></thead>
+  <p class="sub">Vermögenszuwachs aus Abschreibung (Steuereffekt auf laufende Mieteinnahmen), Entschuldung (Tilgung) und Wertentwicklung – bewusst ohne Miet-Cashflow. Grenzsteuersatz für die Steuerersparnis: <input type="number" step="1" style="width:60px;padding:3px 6px" id="vmSteuer" value="${st}"> %</p>
+  <div class="card"><div style="overflow-x:auto"><table><thead><tr><th>Objekt</th><th class="num">AfA / Jahr</th><th class="num">Tilgung / Jahr<br><span style="font-weight:400">(anfänglich)</span></th><th class="num">Wertzuwachs<br><span style="font-weight:400">%/Jahr</span></th><th class="num">AfA kumuliert 10 J.</th><th class="num">Tilgung kumuliert 10 J.<br><span style="font-weight:400">(Annuitätsverlauf)</span></th><th class="num">Wertzuwachs kumuliert 10 J.<br><span style="font-weight:400">(Zinseszins)</span></th></tr></thead>
   <tbody>${rows}
-  <tr style="border-top:2px solid var(--border-strong)"><td><b>Summe</b></td><td class="num"><b>${EUR(Math.round(sumA))}</b></td><td class="num"><b>${EUR(Math.round(sumT))}</b></td><td class="num"><b>${EUR(Math.round(sumA10))}</b><br><span class="mut">Steuerersparnis ~${EUR(Math.round(sumA10*st/100))}</span></td><td class="num"><b>${EUR(Math.round(sumT10))}</b></td></tr></tbody></table></div>
+  <tr style="border-top:2px solid var(--border-strong)"><td><b>Summe</b></td><td class="num"><b>${EUR(Math.round(sumA))}</b></td><td class="num"><b>${EUR(Math.round(sumT))}</b></td><td class="num"><b>${EUR(Math.round(sumW))}/J.</b></td><td class="num"><b>${EUR(Math.round(sumA10))}</b><br><span class="mut">Steuerersparnis ~${EUR(Math.round(sumA10*st/100))}</span></td><td class="num"><b>${EUR(Math.round(sumT10))}</b></td><td class="num"><b>${EUR(Math.round(sumW10))}</b></td></tr></tbody></table></div>
   <div class="btnrow" style="margin-top:10px"><button class="btn primary" id="vmSave">Änderungen speichern</button></div>
-  <p class="note" style="margin-top:10px">AfA-Werte editierbar – Einträge mit „SCHÄTZUNG" beruhen auf 2 % von 80 % des Kaufpreises und sollten nach Kaufpreisaufteilung bzw. Gutachten ersetzt werden (Lindenweg ist der echte Gutachtenwert). AfA baut kein Vermögen direkt auf, sondern spart Steuern (kumulierte AfA × Grenzsteuersatz); Tilgung baut Eigenkapital im Objekt auf. Tilgung 10 J. nach Annuitätsformel (steigender Tilgungsanteil), bei unvollständigen Darlehensdaten lineare Näherung. Keine Steuerberatung.</p></div>`;
+  <p class="note" style="margin-top:10px">AfA-Werte editierbar – Einträge mit „SCHÄTZUNG" beruhen auf 2 % von 80 % des Kaufpreises (Lindenweg = echter Gutachtenwert). Zum Steuersatz: Die 10-Jahres-Frist (§23 EStG) betrifft nur den Verkaufsgewinn – die AfA spart davon unabhängig jedes Jahr Einkommensteuer auf die Mieteinnahmen (AfA × Grenzsteuersatz). Bei Verkauf nach Fristablauf bleibt dieser Vorteil endgültig; bei Verkauf innerhalb der Frist erhöht die AfA den steuerpflichtigen Gewinn. Wertzuwachs je Objekt einstellbar (Planannahme, Standard 1,5 %/Jahr, Basis Kaufpreis, mit Zinseszins). Tilgung 10 J. nach Annuitätsformel. Keine Steuerberatung.</p></div>`;
 }
 function wireVermoegen(){
   const btn=document.getElementById('vmSave'); if(!btn) return;
@@ -954,6 +959,12 @@ function wireVermoegen(){
       const v=parseFloat(inp.value);
       o.vermoegen.afa_jahr=isNaN(v)||v<=0?null:v;
       if(!isNaN(v)&&v>0&&/SCHÄTZUNG/.test(o.vermoegen.afa_quelle||'')) o.vermoegen.afa_quelle='manuell eingetragen';
+    });
+    document.querySelectorAll('[data-wz]').forEach(inp=>{
+      const o=DATA.objekte.find(x=>x.id===inp.dataset.wz); if(!o) return;
+      o.vermoegen=o.vermoegen||{};
+      const v=parseFloat(inp.value);
+      o.vermoegen.wertzuwachs_pa=isNaN(v)?1.5:v;
     });
     const s=parseFloat(document.getElementById('vmSteuer').value);
     if(!isNaN(s)&&s>0&&s<60) DATA.meta.steuersatz=s;
