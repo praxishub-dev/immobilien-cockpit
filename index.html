@@ -334,10 +334,10 @@ function render(){
   const m=document.getElementById('main');
   if(!DATA){ m.innerHTML=viewNoData(); wireNoData(); return; }
   if(VIEW==='dash') m.innerHTML=viewDash();
-  else if(VIEW==='objekte') m.innerHTML=DETAIL?viewObjektDetail(DETAIL):viewObjekte();
+  else if(VIEW==='objekte'){ m.innerHTML=DETAIL?viewObjektDetail(DETAIL):viewObjekte(); if(!DETAIL) wireObjSort(); }
   else if(VIEW==='bank'){ m.innerHTML=viewBank(); wireBank(); }
   else if(VIEW==='miet') m.innerHTML=viewMiet();
-  else if(VIEW==='erinner') m.innerHTML=viewErinner();
+  else if(VIEW==='erinner'){ m.innerHTML=viewErinner(); wireErinner(); }
   else if(VIEW==='ki'){ m.innerHTML=viewKI(); wireKI(); }
   else if(VIEW==='conf'){ m.innerHTML=viewConf(); wireConf(); }
   m.querySelectorAll('[data-open]').forEach(el=>el.addEventListener('click',ev=>{ev.stopPropagation();DETAIL=el.dataset.open;VIEW='objekte';document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('active',x.dataset.v==='objekte'));render();}));
@@ -413,24 +413,82 @@ function viewDash(){
 }
 
 /* ========== Objekte ========== */
+const MON_KURZ=['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'];
+function objektZahlungen(o){
+  if(!PAYMENTS.some(p=>p.betrag>0)) return null;
+  const units=o.einheiten.filter(e=>e.mieter);
+  if(!units.length) return null;
+  const anyObj=units.some(e=>PAYMENTS.some(p=>p.betrag>0 && matchPayment(p)===e.id));
+  if(!anyObj) return {noacct:true};
+  const perOf=p=>p.monat||p.datum?.slice(0,7);
+  const allMonths=[...new Set(PAYMENTS.filter(p=>p.betrag>0).map(perOf).filter(Boolean))].sort();
+  const last3=allMonths.slice(-3);
+  const perUnit=units.map(e=>offeneMonate(o,e));
+  const kum=Math.round(perUnit.flat().reduce((s,x)=>s+x.offen,0)*100)/100;
+  const byMonth=last3.map(m=>{
+    let sum=0,teil=0,offen=0;
+    perUnit.forEach(off=>{ const x=off.find(y=>y.monat===m); if(x){ sum+=x.offen; if(x.ist>0) teil++; else offen++; } });
+    return {m, sum:Math.round(sum*100)/100, offen, teil};
+  });
+  return {byMonth, kum};
+}
+function monatsChips(z){
+  if(!z) return '<span class="mut">keine Umsätze importiert</span>';
+  if(z.noacct) return '<span class="badge b-mut">Konto nicht importiert</span>';
+  return z.byMonth.map(x=>{
+    const kurz=MON_KURZ[+x.m.slice(5)-1];
+    if(x.sum<=0.005) return `<span class="badge b-good" title="${kurz}: alle Mieten eingegangen">${kurz} ✓</span>`;
+    const n=x.offen+x.teil;
+    return `<span class="badge b-${x.offen?'bad':'warn'}" title="${kurz}: ${EUR2(x.sum)} offen (${x.offen} offen, ${x.teil} Teilzahlung)">${kurz} ${n}✗</span>`;
+  }).join(' ');
+}
 function svUrl(o){ return `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${o.lat},${o.lon}`; }
 function mapUrl(o){ return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(o.adresse)}`; }
+function orderedObjekte(){
+  const ord=store.get('ic_order')||[];
+  return [...(DATA?.objekte||[])].sort((a,b)=>{
+    const ia=ord.indexOf(a.id), ib=ord.indexOf(b.id);
+    return (ia<0?999:ia)-(ib<0?999:ib);
+  });
+}
 function viewObjekte(){
-  return `<h2>Objekte</h2><p class="sub">Klick auf ein Objekt für Details, Mieter und Aktionen.</p>
-  <div class="grid obj-grid">${DATA.objekte.map(o=>{
+  return `<h2>Objekte</h2><p class="sub">Klick auf ein Objekt für Details. Karten mit gedrückter Maustaste verschieben, um die Reihenfolge zu ändern – sie wird gespeichert.</p>
+  <div class="grid obj-grid" id="objGrid">${orderedObjekte().map(o=>{
     const miete=o.einheiten.reduce((s,e)=>s+(e.kaltmiete||0),0);
     const cf=miete-(o.finanzierung?.rate||0);
-    return `<div class="obj-card" data-open="${o.id}">
+    const z=objektZahlungen(o);
+    return `<div class="obj-card" draggable="true" data-drag="${o.id}" data-open="${o.id}">
       <h3>${esc(o.name)}</h3><div class="addr">${esc(o.adresse)} · ${esc(o.typ||'')}</div>
       <div class="row"><span>Einheiten</span><b>${o.einheiten.length}</b></div>
       <div class="row"><span>Kaltmiete</span><b>${EUR(miete)}</b></div>
       <div class="row"><span>Rate</span><b>${EUR(Math.round(o.finanzierung?.rate||0))}</b></div>
       <div class="row"><span>Cashflow</span><b style="color:${cf>=0?'var(--good)':'var(--bad)'}">${cf>=0?'+':''}${EUR(Math.round(cf))}</b></div>
+      <div class="row" style="align-items:center"><span>Mieteingänge</span><span style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end">${monatsChips(z)}</span></div>
+      ${z&&!z.noacct&&z.kum>0.005?`<div class="row"><span>Offen kumuliert</span><b style="color:var(--bad)">${EUR2(z.kum)}</b></div>`:''}
       <div class="btnrow">
         <a class="btn small" href="${svUrl(o)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">📍 Street View</a>
         <a class="btn small" href="${mapUrl(o)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Karte</a>
       </div></div>`;
   }).join('')}</div>`;
+}
+function wireObjSort(){
+  const grid=document.getElementById('objGrid'); if(!grid) return;
+  let dragId=null;
+  grid.querySelectorAll('[data-drag]').forEach(card=>{
+    card.addEventListener('dragstart',e=>{ dragId=card.dataset.drag; card.style.opacity='.4'; e.dataTransfer.effectAllowed='move'; });
+    card.addEventListener('dragend',()=>{ card.style.opacity=''; });
+    card.addEventListener('dragover',e=>{ e.preventDefault(); e.dataTransfer.dropEffect='move'; card.style.borderColor='var(--s1)'; });
+    card.addEventListener('dragleave',()=>{ card.style.borderColor=''; });
+    card.addEventListener('drop',e=>{
+      e.preventDefault(); card.style.borderColor='';
+      const targetId=card.dataset.drag;
+      if(!dragId||dragId===targetId) return;
+      const order=orderedObjekte().map(o=>o.id);
+      const from=order.indexOf(dragId), to=order.indexOf(targetId);
+      order.splice(from,1); order.splice(to,0,dragId);
+      store.set('ic_order',order); render();
+    });
+  });
 }
 function viewObjektDetail(id){
   const o=DATA.objekte.find(x=>x.id===id); if(!o) return 'Objekt nicht gefunden';
@@ -494,14 +552,28 @@ function viewMiet(){
 }
 
 /* ========== Erinnerungen ========== */
+function remKey(r){ return r.titel+'|'+r.datum; }
 function viewErinner(){
-  const list=autoReminders();
-  return `<h2>Erinnerungen</h2><p class="sub">Automatisch aus deinen Daten abgeleitete Termine. Jede Erinnerung lässt sich als .ics-Datei in deinen Kalender (Apple/Google/Outlook) übernehmen.</p>
-  <div class="btnrow" style="margin-bottom:14px"><button class="btn primary" data-ics='${JSON.stringify({titel:"",datum:isoDate(today()),notiz:""})}'>+ Eigene Erinnerung</button></div>
+  const dismissed=store.get('ic_dismissed')||[];
+  const all=autoReminders();
+  const list=all.filter(r=>!dismissed.includes(remKey(r)));
+  const hidden=all.length-list.length;
+  return `<h2>Erinnerungen</h2><p class="sub">Automatisch aus deinen Daten abgeleitete Termine. Jede Erinnerung lässt sich als .ics-Datei in deinen Kalender übernehmen oder mit ✕ ausblenden.</p>
+  <div class="btnrow" style="margin-bottom:14px"><button class="btn primary" data-ics='${JSON.stringify({titel:"",datum:isoDate(today()),notiz:""})}'>+ Eigene Erinnerung</button>
+  ${hidden?`<button class="btn" id="remRestore">${hidden} gelöschte wieder anzeigen</button>`:''}</div>
   <div class="card"><table><thead><tr><th>Datum</th><th>Kategorie</th><th>Erinnerung</th><th></th></tr></thead><tbody>
   ${list.map(r=>`<tr><td class="mono">${D(r.datum)}</td><td><span class="badge b-mut">${esc(r.kat)}</span></td><td><b>${esc(r.titel)}</b><br><span class="note">${esc(r.notiz)}</span></td>
-  <td><button class="btn small" data-icsdirect='${JSON.stringify(r).replace(/'/g,"&#39;")}'>⏰ .ics</button></td></tr>`).join('')}
+  <td style="white-space:nowrap"><button class="btn small" data-icsdirect='${JSON.stringify(r).replace(/'/g,"&#39;")}'>⏰ .ics</button>
+  <button class="btn small" title="Erinnerung löschen" style="color:var(--bad)" data-dismiss="${esc(remKey(r))}">✕</button></td></tr>`).join('')||'<tr><td colspan="4" class="note">Keine Erinnerungen.</td></tr>'}
   </tbody></table></div>`;
+}
+function wireErinner(){
+  document.querySelectorAll('[data-dismiss]').forEach(b=>b.addEventListener('click',()=>{
+    const d=store.get('ic_dismissed')||[];
+    d.push(b.dataset.dismiss); store.set('ic_dismissed',d); render();
+  }));
+  const rr=document.getElementById('remRestore');
+  if(rr) rr.addEventListener('click',()=>{ store.set('ic_dismissed',[]); render(); });
 }
 /* ========== Bank & Zahlungen ========== */
 function viewBank(){
