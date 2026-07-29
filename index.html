@@ -106,6 +106,7 @@ dialog::backdrop{background:rgba(10,10,8,.35)}
   <button data-v="bank"><span class="icon">€</span>Bank &amp; Zahlungen</button>
   <button data-v="miet"><span class="icon">↗</span>Mietspiegel-Check</button>
   <button data-v="verkauf"><span class="icon">🏷</span>Verkauf</button>
+  <button data-v="vermoegen"><span class="icon">📈</span>Vermögensaufbau</button>
   <button data-v="erinner"><span class="icon">⏰</span>Erinnerungen</button>
   <button data-v="ki"><span class="icon">✦</span>KI-Fragen</button>
   <button data-v="conf"><span class="icon">⚙</span>Einstellungen</button>
@@ -391,6 +392,7 @@ function render(){
   else if(VIEW==='bank'){ m.innerHTML=viewBank(); wireBank(); }
   else if(VIEW==='miet') m.innerHTML=viewMiet();
   else if(VIEW==='verkauf'){ m.innerHTML=viewVerkauf(); wireVerkauf(); }
+  else if(VIEW==='vermoegen'){ m.innerHTML=viewVermoegen(); wireVermoegen(); }
   else if(VIEW==='erinner'){ m.innerHTML=viewErinner(); wireErinner(); }
   else if(VIEW==='ki'){ m.innerHTML=viewKI(); wireKI(); }
   else if(VIEW==='conf'){ m.innerHTML=viewConf(); wireConf(); }
@@ -557,7 +559,8 @@ function viewObjektDetail(id){
     <td class="num">${EUR(Math.round(warm(e)))}</td>
     <td>${D(e.mietbeginn)}</td>
     <td>${e.letzte_erhoehung?D(e.letzte_erhoehung.datum)+`<br><span class="mut">${EUR(e.letzte_erhoehung.alt)} → ${EUR(e.letzte_erhoehung.neu)}</span>`:'–'}</td>
-    <td><span class="badge b-${c.ampel}">${esc(c.status)}</span>${c.potenzial?`<br><span class="mut">+${EUR(c.potenzial)} mögl.</span>`:''}</td>
+    <td><span class="badge b-${c.ampel}">${esc(c.status)}</span>${c.potenzial?`<br><span class="mut">+${EUR(c.potenzial)} mögl.</span>`:''}
+    ${c.naechsteErhoehung?`<br><span class="mut">Erhöhung ${c.naechsteErhoehung<=today()?'sofort möglich':'ab '+c.naechsteErhoehung.toLocaleDateString('de-DE')}</span>`:''}</td>
     <td>${zahlungsZelle(o,e)}</td>
     <td style="white-space:nowrap"><button class="btn small" data-ics='${JSON.stringify(remind).replace(/'/g,"&#39;")}'>⏰</button>
     <button class="btn small" title="Mieterhöhungs-Schreiben erstellen" data-brief='{"kind":"erh","id":"${e.id}"}'>✉ Erhöhung</button></td></tr>`;
@@ -901,6 +904,61 @@ function viewVerkauf(){
   <div class="btnrow" style="margin-top:10px"><button class="btn primary" id="vkSave">Änderungen speichern</button></div>
   <p class="note" style="margin-top:10px">Wertsteigerung %/Jahr je Objekt anpassbar (linkes Feld) oder Marktwert direkt eintragen (rechtes Feld, z.B. nach Maklereinschätzung – überschreibt die Schätzung). Restschuld = letzter bekannter Saldo minus monatliche Tilgung (Näherung; tatsächliche Tilgung steigt bei Annuitätendarlehen leicht an).</p>
   <p class="note">⚠︎ §23 EStG: Die 10-Jahres-Frist läuft ab Datum des notariellen Kaufvertrags (nicht Übergang/Darlehen) – maßgebliches Datum vor Verkauf prüfen. Verkauf innerhalb der Frist: Gewinn steuerpflichtig. Ab 3 Objektverkäufen in 5 Jahren droht gewerblicher Grundstückshandel. Netto vor Vorfälligkeitsentschädigung, Makler- und Steuerkosten. Keine Steuer-/Rechtsberatung.</p></div>`;
+}
+/* ========== Vermögensaufbau (AfA + Tilgung, ohne Miet-Cashflow) ========== */
+function tilgungJahr(o){
+  const f=o.finanzierung||{};
+  if(f.darlehen&&f.tilgung) return f.darlehen*f.tilgung/100;      // anfängliche Tilgung p.a.
+  if(f.tilgung_monat) return f.tilgung_monat*12;
+  return null;
+}
+function tilgung10J(o){
+  const f=o.finanzierung||{};
+  if(f.darlehen&&f.tilgung&&f.zins){
+    const r=f.zins/100, t=f.tilgung/100;
+    return f.darlehen*t*(Math.pow(1+r,10)-1)/r;                  // getilgtes Kapital nach 10 J. (Annuität)
+  }
+  const tj=tilgungJahr(o);
+  return tj!=null?tj*10:null;
+}
+function viewVermoegen(){
+  const st=DATA.meta?.steuersatz??42;
+  let sumA=0,sumT=0,sumA10=0,sumT10=0;
+  const rows=orderedObjekte().map(o=>{
+    const v=o.vermoegen||{};
+    const afa=v.afa_jahr;
+    const tj=tilgungJahr(o);
+    const t10=tilgung10J(o);
+    const a10=afa!=null?afa*10:null;
+    if(afa)sumA+=afa; if(tj)sumT+=tj; if(a10)sumA10+=a10; if(t10)sumT10+=t10;
+    return `<tr><td><b>${esc(o.name)}</b><br><span class="mut">${esc(v.afa_quelle||'')}</span></td>
+    <td class="num"><input type="number" step="100" style="width:90px;padding:3px 6px;font-size:12px" data-afa="${o.id}" value="${afa??''}" placeholder="AfA €"></td>
+    <td class="num">${tj!=null?EUR(Math.round(tj)):'–'}</td>
+    <td class="num">${a10!=null?`<b>${EUR(Math.round(a10))}</b><br><span class="mut">Steuerersparnis ~${EUR(Math.round(a10*st/100))}</span>`:'–'}</td>
+    <td class="num">${t10!=null?`<b>${EUR(Math.round(t10))}</b>`:'–'}</td></tr>`;
+  }).join('');
+  return `<h2>Vermögensaufbau</h2>
+  <p class="sub">Vermögenszuwachs aus Abschreibung (Steuereffekt) und Entschuldung (Tilgung) – bewusst ohne Miet-Cashflow. Grenzsteuersatz für die Steuerersparnis: <input type="number" step="1" style="width:60px;padding:3px 6px" id="vmSteuer" value="${st}"> %</p>
+  <div class="card"><div style="overflow-x:auto"><table><thead><tr><th>Objekt</th><th class="num">AfA / Jahr</th><th class="num">Tilgung / Jahr<br><span style="font-weight:400">(anfänglich)</span></th><th class="num">AfA kumuliert 10 J.</th><th class="num">Tilgung kumuliert 10 J.<br><span style="font-weight:400">(Annuitätsverlauf)</span></th></tr></thead>
+  <tbody>${rows}
+  <tr style="border-top:2px solid var(--border-strong)"><td><b>Summe</b></td><td class="num"><b>${EUR(Math.round(sumA))}</b></td><td class="num"><b>${EUR(Math.round(sumT))}</b></td><td class="num"><b>${EUR(Math.round(sumA10))}</b><br><span class="mut">Steuerersparnis ~${EUR(Math.round(sumA10*st/100))}</span></td><td class="num"><b>${EUR(Math.round(sumT10))}</b></td></tr></tbody></table></div>
+  <div class="btnrow" style="margin-top:10px"><button class="btn primary" id="vmSave">Änderungen speichern</button></div>
+  <p class="note" style="margin-top:10px">AfA-Werte editierbar – Einträge mit „SCHÄTZUNG" beruhen auf 2 % von 80 % des Kaufpreises und sollten nach Kaufpreisaufteilung bzw. Gutachten ersetzt werden (Lindenweg ist der echte Gutachtenwert). AfA baut kein Vermögen direkt auf, sondern spart Steuern (kumulierte AfA × Grenzsteuersatz); Tilgung baut Eigenkapital im Objekt auf. Tilgung 10 J. nach Annuitätsformel (steigender Tilgungsanteil), bei unvollständigen Darlehensdaten lineare Näherung. Keine Steuerberatung.</p></div>`;
+}
+function wireVermoegen(){
+  const btn=document.getElementById('vmSave'); if(!btn) return;
+  btn.addEventListener('click',()=>{
+    document.querySelectorAll('[data-afa]').forEach(inp=>{
+      const o=DATA.objekte.find(x=>x.id===inp.dataset.afa); if(!o) return;
+      o.vermoegen=o.vermoegen||{};
+      const v=parseFloat(inp.value);
+      o.vermoegen.afa_jahr=isNaN(v)||v<=0?null:v;
+      if(!isNaN(v)&&v>0&&/SCHÄTZUNG/.test(o.vermoegen.afa_quelle||'')) o.vermoegen.afa_quelle='manuell eingetragen';
+    });
+    const s=parseFloat(document.getElementById('vmSteuer').value);
+    if(!isNaN(s)&&s>0&&s<60) DATA.meta.steuersatz=s;
+    store.set('ic_data',DATA); render();
+  });
 }
 function wireVerkauf(){
   const btn=document.getElementById('vkSave'); if(!btn) return;
