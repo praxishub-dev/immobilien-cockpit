@@ -372,6 +372,39 @@ function openPayDialog(unitId){
   rewire();
   dlg.showModal();
 }
+/* ========== Objekt-Stammdaten bearbeiten ========== */
+function openObjEdit(id){
+  const o=DATA.objekte.find(x=>x.id===id); if(!o) return;
+  const f=o.finanzierung||{};
+  const dlg=document.getElementById('objDlg');
+  document.getElementById('objT').textContent='Daten bearbeiten – '+o.name;
+  const F=(lbl,id2,val,type,ph)=>`<div><label>${lbl}</label><input type="${type||'number'}" id="${id2}" value="${val??''}" placeholder="${ph||''}" ${type==='number'||!type?'step="any"':''}></div>`;
+  document.getElementById('objBody').innerHTML=`
+  <div class="frow">${F('Kaufpreis (€)','oeKp',o.kaufpreis)}${F('Kaufdatum','oeKd',o.kaufdatum,'date')}</div>
+  <div class="frow">${F('Bank','oeBank',f.bank,'text','z.B. Sparkasse Schaumburg')}${F('Darlehenssumme (€)','oeDarl',f.darlehen)}</div>
+  <div class="frow">${F('Zins (%)','oeZins',f.zins)}${F('Tilgung (%)','oeTilg',f.tilgung)}</div>
+  <div class="frow">${F('Rate (€/Monat)','oeRate',f.rate)}${F('Zinsbindung bis','oeZb',f.zinsbindung_ende,'date')}</div>
+  <div class="frow">${F('Restschuld (€)','oeRs',f.restschuld_basis?.betrag)}${F('Restschuld-Stand (Datum)','oeRsd',f.restschuld_basis?.datum,'date')}</div>
+  <div class="frow">${F('Tilgung (€/Monat, für Fortschreibung)','oeTm',f.tilgung_monat)}${F('AfA (€/Jahr)','oeAfa',o.vermoegen?.afa_jahr)}</div>
+  <p class="note" style="margin-top:8px">Leer lassen = unbekannt. Die Werte fließen automatisch in Objekte, Verkauf und Vermögensaufbau ein und werden im Browser gespeichert. Für ein Backup: Einstellungen → „Daten exportieren".</p>`;
+  document.getElementById('objSave').onclick=()=>{
+    const num=id2=>{const v=parseFloat(String(document.getElementById(id2).value).replace(',','.'));return isNaN(v)?null:v;};
+    const txt=id2=>document.getElementById(id2).value.trim()||null;
+    o.kaufpreis=num('oeKp'); o.kaufdatum=txt('oeKd');
+    o.finanzierung=o.finanzierung||{};
+    const g=o.finanzierung;
+    g.bank=txt('oeBank'); g.darlehen=num('oeDarl'); g.zins=num('oeZins'); g.tilgung=num('oeTilg');
+    g.rate=num('oeRate'); g.zinsbindung_ende=txt('oeZb');
+    const rs=num('oeRs'), rsd=txt('oeRsd');
+    g.restschuld_basis=(rs!=null)?{betrag:rs, datum:rsd||isoDate(today())}:null;
+    g.tilgung_monat=num('oeTm')??0;
+    o.vermoegen=o.vermoegen||{};
+    const afa=num('oeAfa');
+    if(afa!=null){ o.vermoegen.afa_jahr=afa; o.vermoegen.afa_quelle='manuell eingetragen'; }
+    store.set('ic_data',DATA); dlg.close(); render();
+  };
+  dlg.showModal();
+}
 function textDialog(titel, text){
   document.getElementById('txtT').textContent=titel;
   document.getElementById('txtA').value=text;
@@ -403,6 +436,7 @@ function render(){
   m.querySelectorAll('[data-ics]').forEach(el=>el.addEventListener('click',ev=>{ev.stopPropagation();icsDialog(JSON.parse(el.dataset.ics));}));
   m.querySelectorAll('[data-icsdirect]').forEach(el=>el.addEventListener('click',ev=>{ev.stopPropagation();const p=JSON.parse(el.dataset.icsdirect);downloadICS(p.titel,p.datum,p.notiz);}));
   m.querySelectorAll('[data-pay]').forEach(el=>el.addEventListener('click',ev=>{ev.stopPropagation();openPayDialog(el.dataset.pay);}));
+  m.querySelectorAll('[data-objedit]').forEach(el=>el.addEventListener('click',ev=>{ev.stopPropagation();openObjEdit(el.dataset.objedit);}));
   m.querySelectorAll('[data-brief]').forEach(el=>el.addEventListener('click',ev=>{
     ev.stopPropagation();
     const b=JSON.parse(el.dataset.brief);
@@ -573,6 +607,7 @@ function viewObjektDetail(id){
     <a class="btn" href="${svUrl(o)}" target="_blank" rel="noopener">📍 Street View öffnen</a>
     <a class="btn" href="${mapUrl(o)}" target="_blank" rel="noopener">Google Maps</a>
     <button class="btn" data-ics='${JSON.stringify({titel:o.name,datum:isoDate(today()),notiz:o.adresse}).replace(/'/g,"&#39;")}'>⏰ Erinnerung</button>
+    <button class="btn" data-objedit="${o.id}">✎ Daten bearbeiten</button>
   </div>
   <div class="grid kpis">
     <div class="kpi"><div class="l">Kaufpreis</div><div class="v">${EUR(o.kaufpreis)}</div><div class="d">${o.kaufdatum?'Kauf '+D(o.kaufdatum):''}</div></div>
@@ -1292,6 +1327,13 @@ document.addEventListener('DOMContentLoaded',()=>{
   let migrated=false;
   PAYMENTS.forEach(p=>{ if(!p.manual && p.datum){ const m=detectPeriod(p.zweck,p.datum); if(m!==p.monat){ p.monat=m; migrated=true; } } });
   if(migrated) store.set('ic_payments',PAYMENTS);
+  const odlg=document.createElement('dialog');
+  odlg.id='objDlg'; odlg.style.width='min(620px,94vw)';
+  odlg.innerHTML=`<h3 id="objT" style="margin:0 0 10px">Daten bearbeiten</h3><div id="objBody"></div>
+  <div class="btnrow" style="margin-top:14px;justify-content:flex-end">
+    <button class="btn" onclick="document.getElementById('objDlg').close()">Abbrechen</button>
+    <button class="btn primary" id="objSave">Speichern</button></div>`;
+  document.body.appendChild(odlg);
   const pdlg=document.createElement('dialog');
   pdlg.id='payDlg'; pdlg.style.width='min(640px,94vw)';
   pdlg.innerHTML=`<h3 id="payT" style="margin:0 0 4px">Zahlungen</h3><div id="payBody"></div>
