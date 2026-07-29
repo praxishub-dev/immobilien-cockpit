@@ -120,6 +120,16 @@ h2{font-size:19px}
 table{font-size:12.5px}
 th,td{padding:6px}
 .twrap{overflow-x:auto;-webkit-overflow-scrolling:touch;max-width:100%}
+.mlist{display:flex;flex-direction:column;gap:10px}
+.mrow{border:1px solid var(--border);border-radius:10px;padding:10px 12px;background:#fff}
+.mcell{display:flex;justify-content:space-between;gap:12px;padding:4px 0;align-items:baseline;flex-wrap:wrap}
+.mcell.mhead{display:block;border-bottom:1px solid var(--border);padding:0 0 7px;margin-bottom:5px}
+.mcell.mhead .mlab{display:none}
+.mcell.mhead .mval{text-align:left;font-size:14px}
+.mlab{font-size:10.5px;text-transform:uppercase;letter-spacing:.4px;color:var(--ink-3);font-weight:600;flex-shrink:0}
+.mval{text-align:right;min-width:0;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.mval input[type=number],.mval input[type=text]{max-width:130px}
+.mval .btn{margin:2px 0 0 4px}
 .chart .crow{grid-template-columns:104px 1fr}
 .btn{padding:6px 10px;font-size:12.5px}
 .frow{flex-wrap:wrap}
@@ -517,13 +527,38 @@ function render(){
     if(b.kind==='erh') textDialog('Mieterhöhung: '+u.e.bezeichnung, briefErhoehung(u.o,u.e));
     else textDialog('Zahlungserinnerung: '+u.e.bezeichnung, briefMahnung(u.o,u.e));
   }));
-  // Tabellen scrollbar einpacken (verhindert seitliches Verschieben der ganzen Seite auf dem Handy)
+  // Mobil: Tabellen zu gestapelten Karten umbauen (kein horizontales Scrollen)
+  if(window.innerWidth<=840) mobileTables(m);
+  // Desktop-Fallback: Tabellen scrollbar einpacken
   m.querySelectorAll('table').forEach(t=>{
     const p=t.parentElement;
     if(p&&(p.classList.contains('twrap')||/overflow/.test(p.getAttribute('style')||''))) return;
     const w=document.createElement('div'); w.className='twrap'; t.parentNode.insertBefore(w,t); w.appendChild(t);
   });
   syncActive();
+}
+/* Tabellen → Karten-Liste (mobil). Verschiebt die Original-Zellinhalte, Event-Listener bleiben erhalten. */
+function mobileTables(root){
+  root.querySelectorAll('table').forEach(t=>{
+    const ths=[...t.querySelectorAll('thead th')].map(h=>h.textContent.replace(/\s+/g,' ').trim());
+    if(!ths.length) return;
+    const list=document.createElement('div'); list.className='mlist';
+    [...t.querySelectorAll('tbody tr')].forEach(tr=>{
+      const card=document.createElement('div'); card.className='mrow';
+      const cells=[...tr.children];
+      cells.forEach((td,i)=>{
+        const hasContent=td.textContent.trim()||td.querySelector('input,button,select,a,span,div');
+        if(!hasContent) return;
+        const cell=document.createElement('div'); cell.className='mcell'+(i===0?' mhead':'');
+        const lab=document.createElement('div'); lab.className='mlab'; lab.textContent=cells.length===1?'':(ths[i]||'');
+        const val=document.createElement('div'); val.className='mval';
+        while(td.firstChild) val.appendChild(td.firstChild);
+        cell.appendChild(lab); cell.appendChild(val); card.appendChild(cell);
+      });
+      if(card.children.length) list.appendChild(card);
+    });
+    t.replaceWith(list);
+  });
 }
 
 /* ========== Daten laden ========== */
