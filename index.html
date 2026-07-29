@@ -2,8 +2,16 @@
 <html lang="de">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Immobilien-Cockpit · Specht</title>
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" href="favicon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Cockpit">
+<meta name="theme-color" content="#fcfcfb">
 <style>
 :root{
   color-scheme: light;
@@ -93,7 +101,26 @@ dialog::backdrop{background:rgba(10,10,8,.35)}
 .right{text-align:right}
 .mono{font-variant-numeric:tabular-nums}
 .backlink{font-size:13px;margin-bottom:12px;display:inline-block;cursor:pointer;color:var(--s1)}
-@media(max-width:840px){#app{flex-direction:column}nav{width:100%;height:auto;position:static;display:flex;flex-wrap:wrap;gap:2px}nav h1{width:100%}nav button{width:auto}main{padding:16px}}
+@media(max-width:840px){
+#app{flex-direction:column}
+nav{width:100%;height:auto;position:sticky;top:0;z-index:50;display:flex;flex-wrap:nowrap;overflow-x:auto;gap:4px;padding:8px;border-bottom:1px solid var(--border);-webkit-overflow-scrolling:touch}
+nav h1{display:none}
+nav button{width:auto;flex-shrink:0;padding:8px 12px;font-size:13px;white-space:nowrap}
+main{padding:12px;max-width:100%}
+h2{font-size:18px}
+.kpis{grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px}
+.kpi{padding:10px 12px}.kpi .v{font-size:17px}
+.card{padding:12px}
+table{font-size:12px}
+th,td{padding:5px 6px}
+.chart .crow{grid-template-columns:110px 1fr}
+.btn{padding:6px 10px;font-size:12.5px}
+.frow{flex-wrap:wrap}
+.obj-grid{grid-template-columns:1fr}
+dialog{padding:14px}
+.pill-tabs{overflow-x:auto;flex-wrap:nowrap}
+#rcPaneE{grid-template-columns:1fr!important}
+}
 @media print{nav{display:none}}
 </style>
 </head>
