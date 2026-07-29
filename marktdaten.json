@@ -1,8 +1,1 @@
-{
- "stand": "2026-07-29",
- "bundesweit": {
-  "trend_pa": 2.3,
-  "quelle": "vdp-Immobilienpreisindex Q1 2026 (Wohnen +2,3 %; MFH +2,2 %); Prognose 2026 Dr. Klein ~+3 %"
- },
- "hinweis": "Regionalwerte = immowelt-Angebotspreis-Schätzungen (keine amtlichen Indizes für Kleinstädte); gewichtetes Mittel aus ETW/EFH-Veränderung ggü. Vorjahr. Wertsteigerungssätze je Objekt anpassbar. Automatisches Update alle 2 Tage."
-}
+{"stand":"2026-07-29","bundesweit":{"trend_pa":2.3,"quelle":"vdp-Immobilienpreisindex Q1 2026: Wohnimmobilien bundesweit +2,3 % ggü. Vorjahr (selbst genutztes Wohneigentum +2,5 %, Mehrfamilienhäuser +2,2 %, Neuvertragsmieten +3,0 %). Prognose Dr. Klein für 2026: +3 % bei Wohnimmobilien. Bauzins 10 J.: eff. Topzins 3,66 % (Dr. Klein, Stand 10.07.2026), erwartete Spanne H2/2026: 3,3–3,9 %."},"hinweis":"Angebotspreise ETW (immowelt, Stand Juli 2026): Bückeburg ca. 2.050 €/m² (+1,2 % p.a.), Bad Oeynhausen ca. 2.336 €/m² (−2,2 %), Lingen (Ems) ca. 2.267 €/m² (−1,5 %). Die Zielregionen Schaumburg/OWL/Emsland entwickeln sich damit derzeit schwächer als der Bundestrend. Automatisches Update alle 2 Tage."}
