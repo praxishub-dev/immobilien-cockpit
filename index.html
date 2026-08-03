@@ -1226,12 +1226,9 @@ function viewNK(){
     <div class="row"><span>Status</span><span class="badge ${done?'b-good':(p.da?'b-warn':'b-mut')}">${done?'vollständig':(p.da?'unvollständig':'noch nichts erfasst')}</span></div></div>`;
   }).join('');
   return `<h2>Nebenkosten</h2>
-  <p class="sub">Abrechnungsjahr wählen, Objekt anklicken. Belege sammelt die lokale Scan-Aufgabe auf deinem Mac – deren Ergebnis-Datei (nk-daten.json) kannst du unten oder im Objekt einlesen.</p>
+  <p class="sub">Abrechnungsjahr wählen, Objekt anklicken – dort Belege hochladen (einzeln oder ganzer Ordner), die KI füllt die Checkliste. Bei Vollständigkeit: Abrechnung per Klick.</p>
   <div class="frow" style="max-width:260px;margin-bottom:14px"><div><label>Abrechnungsjahr</label><select id="nkJahr">${jahre.map(j=>`<option ${j===NKJAHR?'selected':''}>${j}</option>`).join('')}</select></div></div>
   <div class="grid obj-grid">${cards}</div>
-  <div class="card" style="margin-top:16px"><h3>NK-Daten importieren</h3>
-  <div class="drop" id="nkDrop" style="padding:24px">Datei <b>nk-daten.json</b> hierher ziehen oder klicken<input type="file" id="nkFile" accept=".json" style="display:none"></div>
-  <p class="note" id="nkImpMsg" style="margin-top:8px"></p></div>
   <p class="note">Frist §556 Abs. 3 BGB: Die Abrechnung für ${NKJAHR} muss den Mietern bis zum <b>31.12.${NKJAHR+1}</b> zugehen – danach sind Nachforderungen ausgeschlossen. Keine Steuer-/Rechtsberatung.</p>`;
 }
 function viewNKDetail(o){
@@ -1262,10 +1259,7 @@ function viewNKDetail(o){
     <input type="file" id="nkUpF1" webkitdirectory multiple style="display:none">
     <input type="file" id="nkUpF2" accept=".pdf,image/*" multiple style="display:none">
   </div>
-  <div id="nkUpProg" class="note" style="margin-top:10px"></div></div>
-  <div class="card"><h3>NK-Daten importieren (nur dieses Objekt oder Sammeldatei)</h3>
-  <div class="drop" id="nkDrop" style="padding:20px">nk-daten.json hierher ziehen oder klicken<input type="file" id="nkFile" accept=".json" style="display:none"></div>
-  <p class="note" id="nkImpMsg" style="margin-top:8px"></p></div>`;
+  <div id="nkUpProg" class="note" style="margin-top:10px"></div></div>`;
 }
 function nkCalc(o){
   const d=nkGet(o.id,NKJAHR);
@@ -1393,14 +1387,6 @@ function wireNK(){
       }));
       if(window.innerWidth<=840){ mobileTables(box); }
     });
-  }
-  const drop=document.getElementById('nkDrop'), fi=document.getElementById('nkFile'), msg=document.getElementById('nkImpMsg');
-  if(drop){
-    drop.addEventListener('click',()=>fi.click());
-    drop.addEventListener('dragover',e=>{e.preventDefault();drop.classList.add('over');});
-    drop.addEventListener('dragleave',()=>drop.classList.remove('over'));
-    drop.addEventListener('drop',e=>{e.preventDefault();drop.classList.remove('over');nkImport(e.dataTransfer.files[0],msg);});
-    fi.addEventListener('change',()=>nkImport(fi.files[0],msg));
   }
 }
 
