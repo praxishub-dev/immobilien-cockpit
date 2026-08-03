@@ -1359,7 +1359,7 @@ function wireNK(){
     const d=nkGet(o.id,NKJAHR);
     const save=()=>{ nkSave(); };
     document.querySelectorAll('[data-nkda]').forEach(el=>el.addEventListener('change',()=>{d.pos[el.dataset.nkda].da=el.checked;save();}));
-    document.querySelectorAll('[data-nkb]').forEach(el=>el.addEventListener('change',()=>{const v=parseFloat(el.value);d.pos[el.dataset.nkb].betrag=isNaN(v)?null:v;if(!isNaN(v)&&v>0)d.pos[el.dataset.nkb].da=true;save();}));
+    document.querySelectorAll('[data-nkb]').forEach(el=>el.addEventListener('change',()=>{const v=parseFloat(el.value);const pp=d.pos[el.dataset.nkb];pp.betrag=isNaN(v)?null:v;pp.belege=[];if(!isNaN(v)&&v>0)pp.da=true;save();}));
     document.querySelectorAll('[data-nks]').forEach(el=>el.addEventListener('change',()=>{d.pos[el.dataset.nks].s=el.value;save();}));
     document.querySelectorAll('[data-nkum]').forEach(el=>el.addEventListener('change',()=>{d.pos[el.dataset.nkum].um=el.checked;save();}));
     const von=document.getElementById('nkVon'), bis=document.getElementById('nkBis');
@@ -1446,8 +1446,8 @@ async function nkUpload(files,o){
       else{
         const jahr=(+r.jahr>=2000&&+r.jahr<2100)?+r.jahr:NKJAHR;
         const kat=NK_KATS.some(([k])=>k===r.kat)?r.kat:'sonstige';
-        batch[jahr]=batch[jahr]||{}; batch[jahr][kat]=batch[jahr][kat]||{sum:0,belege:[]};
-        batch[jahr][kat].sum+=+r.betrag; batch[jahr][kat].belege.push(f.name);
+        batch[jahr]=batch[jahr]||{}; batch[jahr][kat]=batch[jahr][kat]||[];
+        batch[jahr][kat].push({name:f.name,betrag:+r.betrag});
         lines[lines.length-1]='✓ '+esc(f.name)+' → <b>'+esc((NK_KATS.find(([k])=>k===kat)||['',kat])[1])+'</b> '+EUR2(+r.betrag)+' ('+jahr+')';
         done++;
       }
@@ -1456,10 +1456,16 @@ async function nkUpload(files,o){
   }
   Object.entries(batch).forEach(([jahr,kats])=>{
     const d=nkGet(o.id,+jahr);
-    Object.entries(kats).forEach(([kat,v])=>{
+    Object.entries(kats).forEach(([kat,neue])=>{
       const pos=d.pos[kat];
-      pos.betrag=Math.round(v.sum*100)/100; pos.da=true; pos.um=pos.um!==false;
-      pos.beleg=v.belege.join(', ');
+      pos.belege=pos.belege||[];
+      neue.forEach(n=>{
+        const i=pos.belege.findIndex(x=>x.name===n.name);
+        if(i>=0) pos.belege[i]=n; else pos.belege.push(n);
+      });
+      pos.betrag=Math.round(pos.belege.reduce((s,x)=>s+x.betrag,0)*100)/100;
+      pos.da=true; pos.um=pos.um!==false;
+      pos.beleg=pos.belege.map(x=>x.name).join(', ');
     });
   });
   nkSave();
