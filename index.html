@@ -160,6 +160,7 @@ dialog{padding:14px;width:min(480px,94vw)}
   <button data-v="miet"><span class="icon">↗</span>Mietspiegel-Check</button>
   <button data-v="verkauf"><span class="icon">🏷</span>Verkauf</button>
   <button data-v="vermoegen"><span class="icon">📈</span>Vermögensaufbau</button>
+  <button data-v="nk"><span class="icon">🧾</span>Nebenkosten</button>
   <button data-v="erinner"><span class="icon">⏰</span>Erinnerungen</button>
   <button data-v="ki"><span class="icon">✦</span>KI-Fragen</button>
   <button data-v="rechner"><span class="icon">🧮</span>Immobilien-Rechner</button>
@@ -174,6 +175,7 @@ dialog{padding:14px;width:min(480px,94vw)}
   <button data-v="miet"><span class="icon">↗</span>Mietspiegel-Check</button>
   <button data-v="verkauf"><span class="icon">🏷</span>Verkauf</button>
   <button data-v="vermoegen"><span class="icon">📈</span>Vermögensaufbau</button>
+  <button data-v="nk"><span class="icon">🧾</span>Nebenkosten</button>
   <button data-v="ki"><span class="icon">✦</span>KI-Fragen</button>
   <button data-v="rechner"><span class="icon">🧮</span>Immobilien-Rechner</button>
   <button data-v="conf"><span class="icon">⚙</span>Einstellungen</button>
@@ -485,7 +487,7 @@ function textDialog(titel, text){
 /* ========== Router ========== */
 let VIEW='dash', DETAIL=null;
 function syncActive(){
-  const more=['miet','verkauf','vermoegen','ki','rechner','conf'];
+  const more=['miet','verkauf','vermoegen','nk','ki','rechner','conf'];
   document.querySelectorAll('nav button[data-v],#tabbar button[data-v],#moreSheet button[data-v]').forEach(x=>x.classList.toggle('active',x.dataset.v===VIEW));
   const mb=document.getElementById('tbMore'); if(mb) mb.classList.toggle('active',more.includes(VIEW));
 }
@@ -512,6 +514,7 @@ function render(){
   else if(VIEW==='miet') m.innerHTML=viewMiet();
   else if(VIEW==='verkauf'){ m.innerHTML=viewVerkauf(); wireVerkauf(); }
   else if(VIEW==='vermoegen'){ m.innerHTML=viewVermoegen(); wireVermoegen(); }
+  else if(VIEW==='nk'){ m.innerHTML=viewNK(); wireNK(); }
   else if(VIEW==='rechner'){ m.innerHTML=viewRechner(); wireRechner(); }
   else if(VIEW==='erinner'){ m.innerHTML=viewErinner(); wireErinner(); }
   else if(VIEW==='ki'){ m.innerHTML=viewKI(); wireKI(); }
@@ -1179,6 +1182,212 @@ function wireVerkauf(){
     store.set('ic_data',DATA); render();
   });
 }
+/* ========== Nebenkostenabrechnung ========== */
+let NKDATA=store.get('ic_nk')||{};   // {objId:{jahr:{von,bis,pos:{kat:{betrag,da,um,s}}}}}
+let NKSEL=null, NKJAHR=(new Date().getFullYear()-1);
+const NK_KATS=[
+ ['grundsteuer','Grundsteuer'],
+ ['geb_versicherung','Gebäudeversicherung'],
+ ['haftpflicht','Haus- & Grundbesitzerhaftpflicht'],
+ ['wasser','Wasser / Abwasser'],
+ ['muell','Müllabfuhr'],
+ ['strassenreinigung','Straßenreinigung / Winterdienst'],
+ ['heizung','Heizung / Warmwasser (extern abgerechnet)'],
+ ['allgemeinstrom','Allgemeinstrom / Beleuchtung'],
+ ['hausmeister','Hausmeister'],
+ ['garten','Gartenpflege'],
+ ['schornsteinfeger','Schornsteinfeger'],
+ ['aufzug','Aufzug'],
+ ['wartung','Wartung (Heizung, Rauchmelder u.a.)'],
+ ['sonstige','Sonstige Betriebskosten (§2 Nr. 17 BetrKV)']
+];
+function nkGet(objId,jahr){
+  NKDATA[objId]=NKDATA[objId]||{};
+  if(!NKDATA[objId][jahr]) NKDATA[objId][jahr]={von:jahr+'-01-01',bis:jahr+'-12-31',pos:{}};
+  const d=NKDATA[objId][jahr];
+  NK_KATS.forEach(([k])=>{ if(!d.pos[k]) d.pos[k]={betrag:null,da:false,um:k!=='sonstige'||false,s:'fl'}; if(d.pos[k].um==null) d.pos[k].um=true; });
+  return d;
+}
+function nkSave(){ store.set('ic_nk',NKDATA); }
+function nkProgress(o,jahr){
+  const d=NKDATA[o.id]?.[jahr]; if(!d) return {da:0,rel:8};
+  const da=NK_KATS.filter(([k])=>d.pos[k]?.da).length;
+  return {da,rel:NK_KATS.length};
+}
+function viewNK(){
+  if(NKSEL){ const o=DATA.objekte.find(x=>x.id===NKSEL); if(o) return viewNKDetail(o); NKSEL=null; }
+  const jahre=[NKJAHR-1,NKJAHR,NKJAHR+1];
+  const cards=orderedObjekte().map(o=>{
+    const p=nkProgress(o,NKJAHR);
+    const done=p.da>=p.rel;
+    return `<div class="obj-card" data-nksel="${o.id}"><h3>${esc(o.name)}</h3>
+    <div class="addr">${esc(o.adresse||'')}</div>
+    <div class="row"><span>Belege ${NKJAHR}</span><b>${p.da} / ${p.rel}</b></div>
+    <div class="row"><span>Status</span><span class="badge ${done?'b-good':(p.da?'b-warn':'b-mut')}">${done?'vollständig':(p.da?'unvollständig':'noch nichts erfasst')}</span></div></div>`;
+  }).join('');
+  return `<h2>Nebenkosten</h2>
+  <p class="sub">Abrechnungsjahr wählen, Objekt anklicken. Belege sammelt die lokale Scan-Aufgabe auf deinem Mac – deren Ergebnis-Datei (nk-daten.json) kannst du unten oder im Objekt einlesen.</p>
+  <div class="frow" style="max-width:260px;margin-bottom:14px"><div><label>Abrechnungsjahr</label><select id="nkJahr">${jahre.map(j=>`<option ${j===NKJAHR?'selected':''}>${j}</option>`).join('')}</select></div></div>
+  <div class="grid obj-grid">${cards}</div>
+  <div class="card" style="margin-top:16px"><h3>NK-Daten importieren</h3>
+  <div class="drop" id="nkDrop" style="padding:24px">Datei <b>nk-daten.json</b> hierher ziehen oder klicken<input type="file" id="nkFile" accept=".json" style="display:none"></div>
+  <p class="note" id="nkImpMsg" style="margin-top:8px"></p></div>
+  <p class="note">Frist §556 Abs. 3 BGB: Die Abrechnung für ${NKJAHR} muss den Mietern bis zum <b>31.12.${NKJAHR+1}</b> zugehen – danach sind Nachforderungen ausgeschlossen. Keine Steuer-/Rechtsberatung.</p>`;
+}
+function viewNKDetail(o){
+  const d=nkGet(o.id,NKJAHR);
+  const rows=NK_KATS.map(([k,label])=>{
+    const p=d.pos[k];
+    return `<tr><td><b>${esc(label)}</b>${p.beleg?`<br><span class="mut">↳ ${esc(p.beleg)}</span>`:''}</td>
+    <td style="text-align:center"><input type="checkbox" data-nkda="${k}" ${p.da?'checked':''} style="width:auto"></td>
+    <td class="num"><input type="number" step="0.01" style="width:110px" data-nkb="${k}" value="${p.betrag??''}" placeholder="€ gesamt"></td>
+    <td><select data-nks="${k}" style="width:auto;padding:4px 6px;font-size:12.5px"><option value="fl" ${p.s!=='ein'?'selected':''}>Wohnfläche</option><option value="ein" ${p.s==='ein'?'selected':''}>je Einheit gleich</option></select></td>
+    <td style="text-align:center"><input type="checkbox" data-nkum="${k}" ${p.um?'checked':''} style="width:auto" title="auf Mieter umlegbar"></td></tr>`;
+  }).join('');
+  const p=nkProgress(o,NKJAHR);
+  return `<span class="backlink" data-nkback>← alle Objekte</span>
+  <h2>Nebenkosten ${NKJAHR}: ${esc(o.name)}</h2>
+  <p class="sub">Abrechnungszeitraum <input type="date" id="nkVon" value="${d.von}" style="width:auto;display:inline-block"> bis <input type="date" id="nkBis" value="${d.bis}" style="width:auto;display:inline-block"> · Belege: <b>${p.da}/${p.rel}</b></p>
+  <div class="card"><h3>Checkliste &amp; Beträge</h3>
+  <table><thead><tr><th>Position (BetrKV)</th><th>Beleg da</th><th class="num">Gesamtkosten</th><th>Schlüssel</th><th>umlegbar</th></tr></thead><tbody>${rows}</tbody></table>
+  <div class="btnrow"><button class="btn primary" id="nkCalc">Abrechnung erstellen</button></div>
+  <p class="note" style="margin-top:8px">Umlage nach Wohnfläche (§556a BGB Standard) oder je Einheit. Mieterwechsel werden tagesanteilig ab Mietbeginn gerechnet, Leerstandsanteile trägst du als Eigentümer. Heizung/Warmwasser: Werte der externen Abrechnung (Techem/ista) als Gesamtbetrag – bei eigener Heizungsabrechnung HeizkostenV beachten (50–70 % verbrauchsabhängig, hier nicht abgebildet). Gewerbeeinheiten: ggf. USt auf NK beachten. Keine Steuer-/Rechtsberatung.</p>
+  </div>
+  <div id="nkResult"></div>
+  <div class="card"><h3>NK-Daten importieren (nur dieses Objekt oder Sammeldatei)</h3>
+  <div class="drop" id="nkDrop" style="padding:20px">nk-daten.json hierher ziehen oder klicken<input type="file" id="nkFile" accept=".json" style="display:none"></div>
+  <p class="note" id="nkImpMsg" style="margin-top:8px"></p></div>`;
+}
+function nkCalc(o){
+  const d=nkGet(o.id,NKJAHR);
+  const von=new Date(d.von), bis=new Date(d.bis);
+  const totalDays=Math.round((bis-von)/864e5)+1;
+  if(!(totalDays>0)) return null;
+  const units=o.einheiten;
+  const flSum=units.reduce((s,e)=>s+(e.flaeche||0),0);
+  const posList=NK_KATS.map(([k,label])=>({k,label,...d.pos[k]})).filter(x=>x.um&&x.betrag>0);
+  const res=units.map(e=>{
+    let start=von;
+    if(e.mietbeginn){ const mb=new Date(e.mietbeginn); if(mb>von) start=mb; }
+    const days=e.mieter?Math.max(0,Math.round((bis-start)/864e5)+1):0;
+    const zeitanteil=days/totalDays;
+    const posten=posList.map(x=>{
+      const share=x.s==='ein'?1/units.length:((e.flaeche||0)/(flSum||1));
+      return {label:x.label,gesamt:x.betrag,schl:x.s==='ein'?'je Einheit':'Wohnfläche',anteil:x.betrag*share*zeitanteil};
+    });
+    const kosten=posten.reduce((s,x)=>s+x.anteil,0);
+    const voraus=((e.nk||0)+(e.hk||0))*12*zeitanteil;
+    return {e,days,totalDays,start,posten,kosten,voraus,saldo:kosten-voraus};
+  });
+  return {res,von,bis,posList,flSum};
+}
+function briefNK(o,r,von,bis){
+  const e=r.e;
+  const zeile=x=>`  ${x.label}: ${EUR2(x.gesamt)} gesamt · Schlüssel ${x.schl} · Ihr Anteil ${EUR2(Math.round(x.anteil*100)/100)}`;
+  const nachz=r.saldo>0;
+  return `${esc(e.mieter||'Mieter/in')}
+${esc(e.bezeichnung)}, ${esc(o.adresse||o.name)}
+
+Betriebskostenabrechnung ${von.getFullYear()}
+
+Sehr geehrte/r ${esc(e.mieter||'Mieter/in')},
+
+hiermit erhalten Sie die Abrechnung der Betriebskosten für den Zeitraum ${von.toLocaleDateString('de-DE')} bis ${bis.toLocaleDateString('de-DE')}${r.days<r.totalDays?` (Ihr Nutzungszeitraum ab ${r.start.toLocaleDateString('de-DE')}, ${r.days} von ${r.totalDays} Tagen anteilig)`:''}.
+
+Kostenaufstellung:
+${r.posten.map(zeile).join('\n')}
+
+Summe Ihres Kostenanteils: ${EUR2(Math.round(r.kosten*100)/100)}
+Geleistete Vorauszahlungen: ${EUR2(Math.round(r.voraus*100)/100)}
+
+${nachz?`Es ergibt sich eine Nachzahlung von ${EUR2(Math.round(r.saldo*100)/100)}. Bitte überweisen Sie den Betrag innerhalb von 30 Tagen auf das Ihnen bekannte Mietkonto.`:`Es ergibt sich ein Guthaben von ${EUR2(Math.round(-r.saldo*100)/100)}. Der Betrag wird Ihnen in den nächsten Tagen erstattet bzw. mit der nächsten Miete verrechnet.`}
+
+Die Belege können Sie nach Terminvereinbarung einsehen (§ 259 BGB).
+
+Mit freundlichen Grüßen
+Specht & Waschkowski Immobilien eGbR`;
+}
+function nkImport(file,msgEl){
+  const rd=new FileReader();
+  rd.onload=()=>{
+    try{
+      const j=JSON.parse(rd.result);
+      if(j.typ!=='nk-import'||!Array.isArray(j.objekte)) throw new Error('Kein nk-import-Format');
+      const jahr=j.jahr||NKJAHR; NKJAHR=jahr;
+      let hits=0, misses=[];
+      j.objekte.forEach(entry=>{
+        const o=DATA.objekte.find(x=>x.id===entry.objekt||x.name.toLowerCase().includes(String(entry.objekt||'').toLowerCase())||String(entry.objekt||'').toLowerCase().includes(x.name.toLowerCase().slice(0,12)));
+        if(!o){ misses.push(entry.objekt); return; }
+        const d=nkGet(o.id,jahr);
+        (entry.positionen||[]).forEach(p=>{
+          let k=p.kat&&d.pos[p.kat]?p.kat:null;
+          if(!k){ const lbl=String(p.label||p.kat||'').toLowerCase();
+            k=(NK_KATS.find(([kk,ll])=>ll.toLowerCase().includes(lbl)||lbl.includes(kk))||['sonstige'])[0]; }
+          const pos=d.pos[k];
+          pos.betrag=(k==='sonstige'&&pos.betrag?pos.betrag:0)+(+p.betrag||0);
+          if(k!=='sonstige') pos.betrag=+p.betrag||pos.betrag;
+          pos.da=true; pos.um=pos.um!==false;
+          if(p.beleg) pos.beleg=p.beleg;
+          hits++;
+        });
+        if(entry.von) d.von=entry.von; if(entry.bis) d.bis=entry.bis;
+      });
+      nkSave();
+      if(msgEl) msgEl.textContent=`${hits} Position(en) übernommen.`+(misses.length?` Nicht zugeordnet: ${misses.join(', ')}`:'');
+      setTimeout(render,900);
+    }catch(err){ if(msgEl) msgEl.textContent='Import fehlgeschlagen: '+err.message; }
+  };
+  rd.readAsText(file);
+}
+function wireNK(){
+  const js=document.getElementById('nkJahr');
+  if(js) js.addEventListener('change',()=>{NKJAHR=+js.value;render();});
+  document.querySelectorAll('[data-nksel]').forEach(el=>el.addEventListener('click',()=>{NKSEL=el.dataset.nksel;render();window.scrollTo(0,0);}));
+  const back=document.querySelector('[data-nkback]');
+  if(back) back.addEventListener('click',()=>{NKSEL=null;render();});
+  const o=NKSEL?DATA.objekte.find(x=>x.id===NKSEL):null;
+  if(o){
+    const d=nkGet(o.id,NKJAHR);
+    const save=()=>{ nkSave(); };
+    document.querySelectorAll('[data-nkda]').forEach(el=>el.addEventListener('change',()=>{d.pos[el.dataset.nkda].da=el.checked;save();}));
+    document.querySelectorAll('[data-nkb]').forEach(el=>el.addEventListener('change',()=>{const v=parseFloat(el.value);d.pos[el.dataset.nkb].betrag=isNaN(v)?null:v;if(!isNaN(v)&&v>0)d.pos[el.dataset.nkb].da=true;save();}));
+    document.querySelectorAll('[data-nks]').forEach(el=>el.addEventListener('change',()=>{d.pos[el.dataset.nks].s=el.value;save();}));
+    document.querySelectorAll('[data-nkum]').forEach(el=>el.addEventListener('change',()=>{d.pos[el.dataset.nkum].um=el.checked;save();}));
+    const von=document.getElementById('nkVon'), bis=document.getElementById('nkBis');
+    if(von) von.addEventListener('change',()=>{d.von=von.value;save();});
+    if(bis) bis.addEventListener('change',()=>{d.bis=bis.value;save();});
+    const cb=document.getElementById('nkCalc');
+    if(cb) cb.addEventListener('click',()=>{
+      const c=nkCalc(o);
+      const box=document.getElementById('nkResult');
+      if(!c||!c.posList.length){ box.innerHTML='<div class="alert warn">Keine umlegbaren Positionen mit Betrag erfasst.</div>'; return; }
+      const rows=c.res.map((r,i)=>`<tr><td><b>${esc(r.e.bezeichnung)}</b><br><span class="mut">${esc(r.e.mieter||'Leerstand')}</span></td>
+      <td class="num">${r.e.flaeche??'–'} m²</td><td class="num">${r.days}/${r.totalDays} T.</td>
+      <td class="num">${EUR2(Math.round(r.kosten*100)/100)}</td><td class="num">${EUR2(Math.round(r.voraus*100)/100)}</td>
+      <td class="num"><b style="color:${r.saldo>0?'var(--bad)':'var(--good)'}">${r.saldo>0?'Nachz. ':'Guth. '}${EUR2(Math.abs(Math.round(r.saldo*100)/100))}</b></td>
+      <td>${r.e.mieter?`<button class="btn small" data-nkbrief="${i}">✉ Brief</button>`:'<span class="mut">Eigentümer</span>'}</td></tr>`).join('');
+      const eigAnteil=c.res.filter(r=>!r.e.mieter).reduce((s,r)=>s+r.kosten,0)
+        +c.res.filter(r=>r.e.mieter).reduce((s,r)=>s+((r.totalDays-r.days)/r.totalDays)*0,0);
+      box.innerHTML=`<div class="card"><h3>Abrechnung ${NKJAHR}</h3>
+      <table><thead><tr><th>Einheit / Mieter</th><th class="num">Fläche</th><th class="num">Zeitanteil</th><th class="num">Kostenanteil</th><th class="num">Vorauszahlung</th><th class="num">Ergebnis</th><th></th></tr></thead><tbody>${rows}</tbody></table>
+      ${eigAnteil>0?`<p class="note" style="margin-top:8px">Leerstandsanteil (trägst du): ${EUR2(Math.round(eigAnteil*100)/100)}</p>`:''}
+      <p class="note" style="margin-top:6px">Bitte Beträge und Verteilerschlüssel vor Versand prüfen – die Abrechnung ist rechtlich bindend, Fehler machen sie angreifbar.</p></div>`;
+      box.querySelectorAll('[data-nkbrief]').forEach(el=>el.addEventListener('click',()=>{
+        const r=c.res[+el.dataset.nkbrief];
+        textDialog('NK-Abrechnung '+NKJAHR+': '+(r.e.mieter||r.e.bezeichnung), briefNK(o,r,c.von,c.bis));
+      }));
+      if(window.innerWidth<=840){ mobileTables(box); }
+    });
+  }
+  const drop=document.getElementById('nkDrop'), fi=document.getElementById('nkFile'), msg=document.getElementById('nkImpMsg');
+  if(drop){
+    drop.addEventListener('click',()=>fi.click());
+    drop.addEventListener('dragover',e=>{e.preventDefault();drop.classList.add('over');});
+    drop.addEventListener('dragleave',()=>drop.classList.remove('over'));
+    drop.addEventListener('drop',e=>{e.preventDefault();drop.classList.remove('over');nkImport(e.dataTransfer.files[0],msg);});
+    fi.addEventListener('change',()=>nkImport(fi.files[0],msg));
+  }
+}
 /* ========== Immobilien-Rechner (portiert aus dem Standalone-Rechner) ========== */
 let RS_ = store.get('ic_rechner') || {kaufpreis:167500, eigenkapital:30000, mieteQm:9.0, wohnflaeche:54, zins:4.0, tilgung:2.0, steuersatz:47.475, nkSatz:10.57, afaSatz:2.0, instandQm:15};
 const RSL=[
@@ -1366,7 +1575,7 @@ function wireRechner(){
    Daten werden mit AES-GCM (Passwort → PBKDF2) verschlüsselt und als sync.dat
    im Repo abgelegt. Auf GitHub liegt nur unlesbarer Ciphertext.
    Konfiguration (Token + Passwort) bleibt gerätelokal in ic_sync. */
-const SYNC_KEYS=['ic_data','ic_payments','ic_assign','ic_order','ic_dismissed','ic_rechner','ic_alerts_off'];
+const SYNC_KEYS=['ic_data','ic_payments','ic_assign','ic_order','ic_dismissed','ic_rechner','ic_alerts_off','ic_nk'];
 const SYNC_REPO='praxishub-dev/immobilien-cockpit';
 const SYNC_FILE='sync.dat';
 let SYNCCFG=store.get('ic_sync')||{token:'',pass:'',on:false};
@@ -1441,6 +1650,7 @@ async function syncPull(manual){
         SYNC_APPLYING=true;
         SYNC_KEYS.forEach(k=>{ if(state.data[k]!=null) store.set(k,state.data[k]); else store.del(k); });
         DATA=store.get('ic_data'); PAYMENTS=store.get('ic_payments')||[]; ASSIGN=store.get('ic_assign')||{};
+        if(typeof NKDATA!=='undefined') NKDATA=store.get('ic_nk')||{};
         if(typeof RS_!=='undefined'&&state.data.ic_rechner) RS_=state.data.ic_rechner;
         SYNC_APPLYING=false;
         lastSyncTs=state.ts; store.set('ic_sync_ts',lastSyncTs);
