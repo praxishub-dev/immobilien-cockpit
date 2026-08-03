@@ -1254,6 +1254,15 @@ function viewNKDetail(o){
   <p class="note" style="margin-top:8px">Umlage nach Wohnfläche (§556a BGB Standard) oder je Einheit. Mieterwechsel werden tagesanteilig ab Mietbeginn gerechnet, Leerstandsanteile trägst du als Eigentümer. Heizung/Warmwasser: Werte der externen Abrechnung (Techem/ista) als Gesamtbetrag – bei eigener Heizungsabrechnung HeizkostenV beachten (50–70 % verbrauchsabhängig, hier nicht abgebildet). Gewerbeeinheiten: ggf. USt auf NK beachten. Keine Steuer-/Rechtsberatung.</p>
   </div>
   <div id="nkResult"></div>
+  <div class="card"><h3>Belege hochladen – KI wertet aus</h3>
+  <p class="note">Wähle den ganzen Beleg-Ordner (z.B. „NK Abrechnung ${NKJAHR}") oder einzelne PDFs/Fotos. Die App liest jeden Beleg per Claude-API (dein API-Key aus den Einstellungen), erkennt Kostenart, Betrag und Jahr und füllt die Checkliste. iCloud-Dateien lädt dein Mac beim Auswählen automatisch. Kosten: Cent-Beträge je Beleg. Beträge danach kurz prüfen!</p>
+  <div class="btnrow">
+    <button class="btn primary" id="nkUpFolder">📁 Ordner wählen</button>
+    <button class="btn" id="nkUpFiles">Dateien wählen</button>
+    <input type="file" id="nkUpF1" webkitdirectory multiple style="display:none">
+    <input type="file" id="nkUpF2" accept=".pdf,image/*" multiple style="display:none">
+  </div>
+  <div id="nkUpProg" class="note" style="margin-top:10px"></div></div>
   <div class="card"><h3>NK-Daten importieren (nur dieses Objekt oder Sammeldatei)</h3>
   <div class="drop" id="nkDrop" style="padding:20px">nk-daten.json hierher ziehen oder klicken<input type="file" id="nkFile" accept=".json" style="display:none"></div>
   <p class="note" id="nkImpMsg" style="margin-top:8px"></p></div>`;
@@ -1356,6 +1365,12 @@ function wireNK(){
     const von=document.getElementById('nkVon'), bis=document.getElementById('nkBis');
     if(von) von.addEventListener('change',()=>{d.von=von.value;save();});
     if(bis) bis.addEventListener('change',()=>{d.bis=bis.value;save();});
+    const uf1=document.getElementById('nkUpF1'), uf2=document.getElementById('nkUpF2');
+    const ub1=document.getElementById('nkUpFolder'), ub2=document.getElementById('nkUpFiles');
+    if(ub1) ub1.addEventListener('click',()=>uf1.click());
+    if(ub2) ub2.addEventListener('click',()=>uf2.click());
+    if(uf1) uf1.addEventListener('change',()=>nkUpload(uf1.files,o));
+    if(uf2) uf2.addEventListener('change',()=>nkUpload(uf2.files,o));
     const cb=document.getElementById('nkCalc');
     if(cb) cb.addEventListener('click',()=>{
       const c=nkCalc(o);
@@ -1387,6 +1402,69 @@ function wireNK(){
     drop.addEventListener('drop',e=>{e.preventDefault();drop.classList.remove('over');nkImport(e.dataTransfer.files[0],msg);});
     fi.addEventListener('change',()=>nkImport(fi.files[0],msg));
   }
+}
+
+/* ---- Beleg-Upload mit KI-Auswertung (Claude API) ---- */
+async function nkExtractFile(file){
+  const isPdf=/\.pdf$/i.test(file.name)||file.type==='application/pdf';
+  const isImg=/\.(jpe?g|png|webp)$/i.test(file.name);
+  if(!isPdf&&!isImg) return {skip:'übersprungen (kein PDF/Bild)'};
+  if(file.size>15*1024*1024) return {skip:'übersprungen (>15 MB)'};
+  if(file.size<200) return {skip:'übersprungen (leer – vermutlich nicht aus iCloud geladen)'};
+  const b64d=await new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(String(r.result).split(',')[1]);r.onerror=rej;r.readAsDataURL(file);});
+  const kats=NK_KATS.map(([k,l])=>k+' ('+l+')').join(', ');
+  const content=[
+    isPdf?{type:'document',source:{type:'base64',media_type:'application/pdf',data:b64d}}
+         :{type:'image',source:{type:'base64',media_type:file.type||'image/jpeg',data:b64d}},
+    {type:'text',text:'Prüfe, ob dies ein Kostenbeleg für die Betriebskostenabrechnung eines Wohnhauses ist (Jahresrechnung, Bescheid, Police, Handwerker-/Dienstleisterrechnung). Antworte NUR mit einem JSON-Objekt, ohne Erklärtext: {"relevant":true/false,"kat":"eine dieser Kategorien: '+kats+'","betrag":Zahl (Brutto-Gesamtbetrag des Jahres in Euro, Punkt als Dezimaltrenner),"jahr":Abrechnungs-/Leistungsjahr als Zahl,"hinweis":"max 8 Wörter"}. Nicht relevant (relevant:false): Verträge, Vollmachten, Abschlagspläne ohne Jahressumme, Zählerstände, Grundrisse, Mahnungen. Bei Gas-/Heizungsrechnungen kat=heizung, bei Strom für Allgemeinflächen kat=allgemeinstrom.'}
+  ];
+  const resp=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{
+    'content-type':'application/json','x-api-key':SETTINGS.apiKey,
+    'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'
+  },body:JSON.stringify({model:SETTINGS.model||'claude-sonnet-4-5',max_tokens:300,messages:[{role:'user',content}]})});
+  const j=await resp.json();
+  if(j.error) throw new Error(j.error.message||'API-Fehler');
+  const txt=j.content.map(x=>x.text||'').join('');
+  const m=txt.match(/\{[\s\S]*\}/);
+  if(!m) throw new Error('keine auswertbare Antwort');
+  return JSON.parse(m[0]);
+}
+async function nkUpload(files,o){
+  const prog=document.getElementById('nkUpProg');
+  if(!SETTINGS.apiKey){ prog.innerHTML='<b style="color:var(--bad)">Kein API-Key hinterlegt</b> – unter Einstellungen → Claude API eintragen.'; return; }
+  const list=[...files].filter(f=>!f.name.startsWith('.'));
+  if(!list.length){ prog.textContent='Keine Dateien gewählt.'; return; }
+  const lines=[]; const show=()=>{prog.innerHTML=lines.join('<br>');};
+  const batch={};  // jahr -> kat -> {sum, belege[]}
+  let done=0;
+  for(const f of list){
+    lines.push('⏳ '+esc(f.name)); show();
+    try{
+      const r=await nkExtractFile(f);
+      if(r.skip){ lines[lines.length-1]='– '+esc(f.name)+' <span class="mut">'+esc(r.skip)+'</span>'; }
+      else if(!r.relevant||!(+r.betrag>0)){ lines[lines.length-1]='– '+esc(f.name)+' <span class="mut">nicht NK-relevant'+(r.hinweis?' ('+esc(r.hinweis)+')':'')+'</span>'; }
+      else{
+        const jahr=(+r.jahr>=2000&&+r.jahr<2100)?+r.jahr:NKJAHR;
+        const kat=NK_KATS.some(([k])=>k===r.kat)?r.kat:'sonstige';
+        batch[jahr]=batch[jahr]||{}; batch[jahr][kat]=batch[jahr][kat]||{sum:0,belege:[]};
+        batch[jahr][kat].sum+=+r.betrag; batch[jahr][kat].belege.push(f.name);
+        lines[lines.length-1]='✓ '+esc(f.name)+' → <b>'+esc((NK_KATS.find(([k])=>k===kat)||['',kat])[1])+'</b> '+EUR2(+r.betrag)+' ('+jahr+')';
+        done++;
+      }
+    }catch(e){ lines[lines.length-1]='✗ '+esc(f.name)+' <span style="color:var(--bad)">'+esc(e.message)+'</span>'; }
+    show();
+  }
+  Object.entries(batch).forEach(([jahr,kats])=>{
+    const d=nkGet(o.id,+jahr);
+    Object.entries(kats).forEach(([kat,v])=>{
+      const pos=d.pos[kat];
+      pos.betrag=Math.round(v.sum*100)/100; pos.da=true; pos.um=pos.um!==false;
+      pos.beleg=v.belege.join(', ');
+    });
+  });
+  nkSave();
+  lines.push('<b>'+done+' Beleg(e) übernommen.</b> Ansicht aktualisiert sich …'); show();
+  setTimeout(render,2200);
 }
 /* ========== Immobilien-Rechner (portiert aus dem Standalone-Rechner) ========== */
 let RS_ = store.get('ic_rechner') || {kaufpreis:167500, eigenkapital:30000, mieteQm:9.0, wohnflaeche:54, zins:4.0, tilgung:2.0, steuersatz:47.475, nkSatz:10.57, afaSatz:2.0, instandQm:15};
