@@ -1235,7 +1235,10 @@ function viewNKDetail(o){
   const d=nkGet(o.id,NKJAHR);
   const rows=NK_KATS.map(([k,label])=>{
     const p=d.pos[k];
-    return `<tr><td><b>${esc(label)}</b>${p.beleg?`<br><span class="mut">↳ ${esc(p.beleg)}</span>`:''}</td>
+    const belegList=(p.belege&&p.belege.length)
+      ?p.belege.map((bl,bi)=>`<br><span class="mut">↳ ${esc(bl.name)} (${EUR2(bl.betrag)}) <button class="ax" data-nkdel="${k}|${bi}" title="Beleg entfernen" style="position:static;font-size:13px;padding:0 4px;color:var(--bad)">×</button></span>`).join('')
+      :(p.beleg?`<br><span class="mut">↳ ${esc(p.beleg)}</span>`:'');
+    return `<tr><td><b>${esc(label)}</b>${belegList}</td>
     <td style="text-align:center"><input type="checkbox" data-nkda="${k}" ${p.da?'checked':''} style="width:auto"></td>
     <td class="num"><input type="number" step="0.01" style="width:110px" data-nkb="${k}" value="${p.betrag??''}" placeholder="€ gesamt"></td>
     <td><select data-nks="${k}" style="width:auto;padding:4px 6px;font-size:12.5px"><option value="fl" ${p.s!=='ein'?'selected':''}>Wohnfläche</option><option value="ein" ${p.s==='ein'?'selected':''}>je Einheit gleich</option></select></td>
@@ -1356,6 +1359,16 @@ function wireNK(){
     document.querySelectorAll('[data-nkb]').forEach(el=>el.addEventListener('change',()=>{const v=parseFloat(el.value);const pp=d.pos[el.dataset.nkb];pp.betrag=isNaN(v)?null:v;pp.belege=[];if(!isNaN(v)&&v>0)pp.da=true;save();}));
     document.querySelectorAll('[data-nks]').forEach(el=>el.addEventListener('change',()=>{d.pos[el.dataset.nks].s=el.value;save();}));
     document.querySelectorAll('[data-nkum]').forEach(el=>el.addEventListener('change',()=>{d.pos[el.dataset.nkum].um=el.checked;save();}));
+    document.querySelectorAll('[data-nkdel]').forEach(el=>el.addEventListener('click',ev=>{
+      ev.stopPropagation();
+      const [kat,bi]=el.dataset.nkdel.split('|');
+      const pos=d.pos[kat];
+      if(!pos.belege) return;
+      pos.belege.splice(+bi,1);
+      if(pos.belege.length){ pos.betrag=Math.round(pos.belege.reduce((s,x)=>s+x.betrag,0)*100)/100; pos.beleg=pos.belege.map(x=>x.name).join(', '); }
+      else { pos.betrag=null; pos.da=false; pos.beleg=''; }
+      save(); render();
+    }));
     const von=document.getElementById('nkVon'), bis=document.getElementById('nkBis');
     if(von) von.addEventListener('change',()=>{d.von=von.value;save();});
     if(bis) bis.addEventListener('change',()=>{d.bis=bis.value;save();});
