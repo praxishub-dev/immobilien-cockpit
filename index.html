@@ -1732,9 +1732,9 @@ tr.sum td{border-top:1.5pt solid #111;border-bottom:none;font-weight:bold}
 [contenteditable]:hover{outline:1.5px dashed #2a78d6;outline-offset:3px}
 @media print{body{margin:0;max-width:none;padding:0}.no-print{display:none!important}[contenteditable]:hover{outline:none}}
 </style></head><body>
-<div class="toolbar no-print" style="position:sticky;top:0;background:#fff8dc;border:1px solid #d9c869;border-radius:8px;padding:10px 14px;margin-bottom:18px;font-size:10pt">
-✏️ <b>Anschrift und Texte sind anklickbar und direkt änderbar.</b> Änderungen an der Anschrift werden für diesen Mieter gespeichert.
-<button onclick="window.print()" style="float:right;padding:6px 16px;font-size:10pt;cursor:pointer">🖨 Drucken / Als PDF sichern</button></div>
+<div class="toolbar no-print" style="position:sticky;top:0;display:flex;align-items:center;gap:16px;background:#fff8dc;border:1px solid #d9c869;border-radius:8px;padding:10px 14px;margin-bottom:18px;font-size:10pt;z-index:10">
+<div style="flex:1;min-width:0">✏️ <b>Anschrift und Texte sind anklickbar und direkt änderbar.</b> Änderungen an der Anschrift werden für diesen Mieter gespeichert.</div>
+<button onclick="window.print()" style="flex-shrink:0;padding:8px 18px;font-size:10pt;cursor:pointer;background:#2a78d6;color:#fff;border:0;border-radius:6px;white-space:nowrap">🖨 Drucken / Als PDF sichern</button></div>
 <div class="abs" contenteditable="true">${nkAbsender(o).split('\n').map(esc).join(' · ')}</div>
 <div class="empf" contenteditable="true" id="empf">${esc(nkAnschrift(o,e))}</div>
 <div class="datum">Bückeburg, den ${heute}</div>
