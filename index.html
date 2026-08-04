@@ -795,7 +795,7 @@ function viewMiet(){
     const c=mietCheck(o,e);
     const ms=mietspiegelOf(o.ort);
     const frei=c.naechsteErhoehung;
-    const remind = c.potenzial>0&&frei?{titel:`Mieterhöhung: ${e.bezeichnung} (${e.mieter||'–'})`,datum:isoDate(frei<today()?today():addMonths(frei,-2)),notiz:`${o.name} – Potenzial +${c.potenzial} €/Monat. ${c.hinweis.join(' ')}`}:null;
+    const remind = frei?{titel:`Mieterhöhung prüfen: ${e.bezeichnung} (${e.mieter||'–'})`,datum:isoDate(frei<today()?today():addMonths(frei,-2)),notiz:`${o.name} – ${c.potenzial>0?`Potenzial +${c.potenzial} €/Monat.`:'Kappungsgrenze aktuell ausgeschöpft – Potenzial zum Termin neu prüfen.'} ${c.hinweis.join(' ')}`}:null;
     return `<tr><td><b>${esc(e.bezeichnung)}</b><br><span class="mut">${esc(o.name)} · ${esc(e.mieter||'leer')}</span></td>
     <td class="num">${c.qm?QM(c.qm):'–'}</td>
     <td class="num">${ms?QM(ms.wert):'–'}<br><span class="mut">${ms?ms.spanne[0].toLocaleString('de-DE')+'–'+ms.spanne[1].toLocaleString('de-DE'):''}</span></td>
