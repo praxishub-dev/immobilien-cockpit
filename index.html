@@ -509,7 +509,7 @@ function render(){
   const m=document.getElementById('main');
   if(!DATA&&VIEW!=='conf'){ m.innerHTML=viewNoData(); wireNoData(); syncActive(); return; }
   if(VIEW==='dash') m.innerHTML=viewDash();
-  else if(VIEW==='objekte'){ m.innerHTML=DETAIL?viewObjektDetail(DETAIL):viewObjekte(); if(!DETAIL) wireObjSort(); }
+  else if(VIEW==='objekte'){ m.innerHTML=DETAIL?viewObjektDetail(DETAIL):viewObjekte(); if(!DETAIL){ wireObjSort(); if(typeof wireObjNeu==='function') wireObjNeu(); } }
   else if(VIEW==='bank'){ m.innerHTML=viewBank(); wireBank(); }
   else if(VIEW==='miet') m.innerHTML=viewMiet();
   else if(VIEW==='verkauf'){ m.innerHTML=viewVerkauf(); wireVerkauf(); }
@@ -707,6 +707,12 @@ function orderedObjekte(){
 }
 function viewObjekte(){
   return `<h2>Objekte</h2><p class="sub">Klick auf ein Objekt für Details. Karten mit gedrückter Maustaste verschieben, um die Reihenfolge zu ändern – sie wird gespeichert.</p>
+  <div class="btnrow" style="margin-bottom:14px"><button class="btn primary" id="onFolder">➕ Neues Objekt aus Ordner</button>
+  <button class="btn" id="onFiles">… aus einzelnen Dateien</button>
+  <input type="file" id="onF1" webkitdirectory multiple style="display:none">
+  <input type="file" id="onF2" accept=".pdf,image/*" multiple style="display:none"></div>
+  <p class="note" id="onProg" style="margin-bottom:12px"></p>
+  ${typeof viewObjNeuForm==='function'?viewObjNeuForm():''}
   <div class="grid obj-grid" id="objGrid">${orderedObjekte().map(o=>{
     const miete=o.einheiten.reduce((s,e)=>s+(e.kaltmiete||0),0);
     const cf=miete-(o.finanzierung?.rate||0);
@@ -1041,6 +1047,138 @@ function matchPayment(p){
     if(amountHits.length===1) return amountHits[0].e.id;
   }
   return null;
+}
+/* ========== Neues Objekt aus Ordner (KI-Auswertung) ========== */
+let OBJNEU=null;   // Entwurf {objekt:{...}, einheiten:[...], quellen:[]}
+function slugify(s){ return String(s||'').toLowerCase().replace(/[äöüß]/g,m=>({ä:'ae',ö:'oe',ü:'ue',ß:'ss'}[m])).replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,40)||'objekt'; }
+async function objExtractFile(file){
+  const isPdf=/\.pdf$/i.test(file.name)||file.type==='application/pdf';
+  const isImg=/\.(jpe?g|png|webp)$/i.test(file.name);
+  if(!isPdf&&!isImg) return {skip:'kein PDF/Bild'};
+  if(file.size>15*1024*1024) return {skip:'>15 MB'};
+  if(file.size<200) return {skip:'leer (iCloud nicht geladen?)'};
+  const b64d=await new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(String(r.result).split(',')[1]);r.onerror=rej;r.readAsDataURL(file);});
+  const content=[
+    isPdf?{type:'document',source:{type:'base64',media_type:'application/pdf',data:b64d}}
+         :{type:'image',source:{type:'base64',media_type:file.type||'image/jpeg',data:b64d}},
+    {type:'text',text:'Analysiere dieses Immobilien-Dokument. Antworte NUR mit einem JSON-Objekt ohne Erklärtext. Gib ausschließlich Felder aus, die im Dokument wirklich stehen (alles andere weglassen): {"dok":"kaufvertrag|mietvertrag|darlehensvertrag|expose|sonstiges","objekt":{"name":"Kurzname z.B. Straße Hausnr, Ort","strasse":"Straße Hausnr","plz":"","ort":"","typ":"z.B. MFH 6 Wohnungen / ETW / Reihenhaus"},"kaufpreis":Zahl,"kaufdatum":"YYYY-MM-DD (Datum des notariellen Kaufvertrags)","finanzierung":{"bank":"","darlehen":Zahl,"zins":Zahl in Prozent,"tilgung":Zahl in Prozent,"rate":monatliche Rate als Zahl,"zinsbindung_ende":"YYYY-MM-DD"},"einheit":{"bezeichnung":"z.B. EG links","mieter":"Name(n)","flaeche":Zahl qm,"kaltmiete":Zahl,"nk":NK-Vorauszahlung Zahl,"hk":Heizkosten-Vorauszahlung Zahl,"mietbeginn":"YYYY-MM-DD","index":true falls Indexmietvertrag},"iban":"IBAN des Mietkontos falls genannt"}'}
+  ];
+  const resp=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{
+    'content-type':'application/json','x-api-key':SETTINGS.apiKey,
+    'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'
+  },body:JSON.stringify({model:SETTINGS.model||'claude-sonnet-4-5',max_tokens:600,messages:[{role:'user',content}]})});
+  const j=await resp.json();
+  if(j.error) throw new Error(j.error.message||'API-Fehler');
+  const m=(j.content.map(x=>x.text||'').join('')).match(/\{[\s\S]*\}/);
+  if(!m) throw new Error('keine auswertbare Antwort');
+  return JSON.parse(m[0]);
+}
+async function objNeuUpload(files){
+  const prog=document.getElementById('onProg');
+  if(!SETTINGS.apiKey){ prog.innerHTML='<b style="color:var(--bad)">Kein API-Key hinterlegt</b> – unter Einstellungen → Claude API eintragen.'; return; }
+  const list=[...files].filter(f=>!f.name.startsWith('.'));
+  if(!list.length){ prog.textContent='Keine Dateien gewählt.'; return; }
+  const lines=[]; const show=()=>{prog.innerHTML=lines.join('<br>');};
+  const draft={objekt:{},kauf:{},fin:{},einheiten:[],iban:'',quellen:[]};
+  for(const f of list){
+    lines.push('⏳ '+esc(f.name)); show();
+    try{
+      const r=await objExtractFile(f);
+      if(r.skip){ lines[lines.length-1]='– '+esc(f.name)+' <span class="mut">'+esc(r.skip)+'</span>'; show(); continue; }
+      if(r.objekt){ ['name','strasse','plz','ort','typ'].forEach(k=>{ if(r.objekt[k]&&!draft.objekt[k]) draft.objekt[k]=r.objekt[k]; }); }
+      if(r.kaufpreis&&!draft.kauf.kaufpreis) draft.kauf.kaufpreis=+r.kaufpreis;
+      if(r.kaufdatum&&!draft.kauf.kaufdatum) draft.kauf.kaufdatum=r.kaufdatum;
+      if(r.finanzierung){ ['bank','darlehen','zins','tilgung','rate','zinsbindung_ende'].forEach(k=>{ if(r.finanzierung[k]!=null&&draft.fin[k]==null) draft.fin[k]=r.finanzierung[k]; }); }
+      if(r.iban&&!draft.iban) draft.iban=r.iban;
+      if(r.einheit&&(r.einheit.mieter||r.einheit.kaltmiete)){
+        const dup=draft.einheiten.find(e=>e.bezeichnung===r.einheit.bezeichnung&&e.mieter===r.einheit.mieter);
+        if(!dup) draft.einheiten.push({bezeichnung:r.einheit.bezeichnung||('Einheit '+(draft.einheiten.length+1)),mieter:r.einheit.mieter||'',flaeche:+r.einheit.flaeche||null,kaltmiete:+r.einheit.kaltmiete||null,nk:+r.einheit.nk||0,hk:+r.einheit.hk||0,mietbeginn:r.einheit.mietbeginn||'',mietart:r.einheit.index?'index':'standard'});
+      }
+      lines[lines.length-1]='✓ '+esc(f.name)+' <span class="mut">('+esc(r.dok||'gelesen')+')</span>';
+      draft.quellen.push(f.name);
+    }catch(e){ lines[lines.length-1]='✗ '+esc(f.name)+' <span style="color:var(--bad)">'+esc(e.message)+'</span>'; }
+    show();
+  }
+  OBJNEU=draft;
+  lines.push('<b>Fertig – bitte unten prüfen und speichern.</b>'); show();
+  render(); window.scrollTo(0,document.body.scrollHeight);
+}
+function viewObjNeuForm(){
+  if(!OBJNEU) return '';
+  const d=OBJNEU;
+  const eRows=d.einheiten.map((e,i)=>`<tr>
+    <td><input type="text" data-one="${i}:bezeichnung" value="${esc(e.bezeichnung)}"></td>
+    <td><input type="text" data-one="${i}:mieter" value="${esc(e.mieter)}"></td>
+    <td class="num"><input type="number" step="0.1" style="width:75px" data-one="${i}:flaeche" value="${e.flaeche??''}"></td>
+    <td class="num"><input type="number" step="1" style="width:85px" data-one="${i}:kaltmiete" value="${e.kaltmiete??''}"></td>
+    <td class="num"><input type="number" step="1" style="width:70px" data-one="${i}:nk" value="${e.nk??''}"></td>
+    <td class="num"><input type="number" step="1" style="width:70px" data-one="${i}:hk" value="${e.hk??''}"></td>
+    <td><input type="date" style="width:140px" data-one="${i}:mietbeginn" value="${esc(e.mietbeginn)}"></td>
+    <td><button class="ax" data-onedel="${i}" style="position:static;color:var(--bad)">×</button></td></tr>`).join('');
+  return `<div class="card" id="onForm"><h3>Neues Objekt – bitte prüfen &amp; speichern</h3>
+  <p class="note">Aus ${d.quellen.length} Dokument(en) zusammengebaut. Alle Felder editierbar – besonders Kaufdatum (=§23-Frist!) und Mieten kurz gegen die Verträge prüfen.</p>
+  <div class="frow"><div><label>Name</label><input type="text" id="onName" value="${esc(d.objekt.name||'')}"></div>
+  <div><label>Typ</label><input type="text" id="onTyp" value="${esc(d.objekt.typ||'')}"></div></div>
+  <div class="frow"><div><label>Straße &amp; Hausnr.</label><input type="text" id="onStr" value="${esc(d.objekt.strasse||'')}"></div>
+  <div style="flex:0 0 110px"><label>PLZ</label><input type="text" id="onPlz" value="${esc(d.objekt.plz||'')}"></div>
+  <div><label>Ort</label><input type="text" id="onOrt" value="${esc(d.objekt.ort||'')}"></div></div>
+  <div class="frow"><div><label>Kaufpreis €</label><input type="number" id="onKp" value="${d.kauf.kaufpreis??''}"></div>
+  <div><label>Kaufdatum (notariell)</label><input type="date" id="onKd" value="${esc(d.kauf.kaufdatum||'')}"></div>
+  <div><label>Mietkonto-IBAN</label><input type="text" id="onIban" value="${esc(d.iban||'')}"></div></div>
+  <div class="frow"><div><label>Bank</label><input type="text" id="onBank" value="${esc(d.fin.bank||'')}"></div>
+  <div><label>Darlehen €</label><input type="number" id="onDarl" value="${d.fin.darlehen??''}"></div>
+  <div><label>Zins %</label><input type="number" step="0.01" id="onZins" value="${d.fin.zins??''}"></div>
+  <div><label>Tilgung %</label><input type="number" step="0.01" id="onTilg" value="${d.fin.tilgung??''}"></div>
+  <div><label>Rate €/M.</label><input type="number" id="onRate" value="${d.fin.rate??''}"></div>
+  <div><label>Zinsbindung bis</label><input type="date" id="onZb" value="${esc(d.fin.zinsbindung_ende||'')}"></div></div>
+  <label style="margin-top:14px">Einheiten &amp; Mieter</label>
+  <table><thead><tr><th>Bezeichnung</th><th>Mieter</th><th class="num">m²</th><th class="num">Kalt €</th><th class="num">NK €</th><th class="num">HK €</th><th>Mietbeginn</th><th></th></tr></thead>
+  <tbody id="onEinh">${eRows||''}</tbody></table>
+  <div class="btnrow"><button class="btn" id="onAddE">+ Einheit hinzufügen</button></div>
+  <div class="btnrow" style="margin-top:14px"><button class="btn primary" id="onSave">Objekt speichern</button>
+  <button class="btn" id="onCancel" style="color:var(--bad)">Verwerfen</button></div></div>`;
+}
+function wireObjNeu(){
+  const b1=document.getElementById('onFolder'), b2=document.getElementById('onFiles');
+  const f1=document.getElementById('onF1'), f2=document.getElementById('onF2');
+  if(b1){ b1.addEventListener('click',()=>f1.click()); b2.addEventListener('click',()=>f2.click());
+    f1.addEventListener('change',()=>objNeuUpload(f1.files)); f2.addEventListener('change',()=>objNeuUpload(f2.files)); }
+  if(!OBJNEU) return;
+  const d=OBJNEU;
+  document.querySelectorAll('[data-one]').forEach(el=>el.addEventListener('change',()=>{
+    const [i,f]=el.dataset.one.split(':');
+    const v=el.type==='number'?(el.value===''?null:+el.value):el.value;
+    d.einheiten[+i][f]=v;
+  }));
+  document.querySelectorAll('[data-onedel]').forEach(el=>el.addEventListener('click',()=>{ d.einheiten.splice(+el.dataset.onedel,1); render(); }));
+  const add=document.getElementById('onAddE');
+  if(add) add.addEventListener('click',()=>{ d.einheiten.push({bezeichnung:'Einheit '+(d.einheiten.length+1),mieter:'',flaeche:null,kaltmiete:null,nk:0,hk:0,mietbeginn:'',mietart:'standard'}); render(); });
+  const cancel=document.getElementById('onCancel');
+  if(cancel) cancel.addEventListener('click',()=>{ OBJNEU=null; render(); });
+  const saveB=document.getElementById('onSave');
+  if(saveB) saveB.addEventListener('click',()=>{
+    const g=id=>document.getElementById(id).value.trim();
+    const gn=id=>{const v=parseFloat(document.getElementById(id).value);return isNaN(v)?null:v;};
+    const name=g('onName')||'Neues Objekt';
+    let id=slugify(name); let n=2; while(DATA.objekte.some(o=>o.id===id)){ id=slugify(name)+'-'+n++; }
+    const adresse=[g('onStr'),(g('onPlz')+' '+g('onOrt')).trim()].filter(Boolean).join(', ');
+    const kp=gn('onKp');
+    const obj={
+      id, name, adresse, ort:g('onOrt'), typ:g('onTyp'),
+      kaufpreis:kp, kaufdatum:g('onKd')||null,
+      mietkonto:g('onIban')||null,
+      finanzierung:{bank:g('onBank')||null,darlehen:gn('onDarl'),zins:gn('onZins'),tilgung:gn('onTilg'),rate:gn('onRate'),zinsbindung_ende:g('onZb')||null,
+        tilgung_monat:(gn('onDarl')&&gn('onTilg'))?Math.round(gn('onDarl')*gn('onTilg')/100/12):null,
+        restschuld_basis:(gn('onDarl')&&g('onKd'))?{datum:g('onKd'),betrag:gn('onDarl')}:null},
+      verkauf:{wertsteigerung_pa:1.5,wert_quelle:'Schätzung (neu angelegt)'},
+      vermoegen:{afa_jahr:kp?Math.round(kp*0.8*0.02):null,afa_quelle:kp?'SCHÄTZUNG 2 % von 80 % Kaufpreis':'',wertzuwachs_pa:1.5},
+      einheiten:d.einheiten.map((e,i)=>({id:id+'-'+slugify(e.bezeichnung||('e'+i)),bezeichnung:e.bezeichnung,mieter:e.mieter||null,flaeche:e.flaeche,kaltmiete:e.kaltmiete,nk:e.nk||0,hk:e.hk||0,mietbeginn:e.mietbeginn||null,mietart:e.mietart||'standard'}))
+    };
+    DATA.objekte.push(obj);
+    store.set('ic_data',DATA);
+    OBJNEU=null;
+    DETAIL=obj.id; render(); window.scrollTo(0,0);
+  });
 }
 /* ========== Verkauf ========== */
 function monateSeit(datumStr){
