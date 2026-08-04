@@ -1418,11 +1418,11 @@ function viewNKDetail(o){
     <td style="text-align:center"><span class="backlink" data-nkna="${k}" style="font-size:12px;margin:0">aktivieren</span></td></tr>`;
     const ist=nkIst(p); const need=+soll[k]||0;
     const warnB=need>0&&ist<need;
-    return `<tr><td><b>${esc(label)}</b>${warnB?` <span class="badge b-warn">${ist}/${need}</span>`:''}${belegList}</td>
+    return `<tr><td><b>${esc(label)}</b>${warnB?` <span class="badge b-warn">${ist}/${need}</span>`:''} <button class="btn small" data-nkna="${k}" title="Diese Position gibt es bei diesem Objekt nicht – aus der Zählung nehmen" style="padding:0 7px;font-size:10.5px;color:var(--ink-3);border-color:var(--border)">entfällt</button>${belegList}</td>
     <td style="text-align:center"><input type="checkbox" data-nkda="${k}" ${p.da?'checked':''} style="width:auto"><div class="mut" style="font-size:10.5px;white-space:nowrap;margin-top:4px">Soll <input type="number" min="0" max="20" data-nksoll="${k}" value="${need||''}" placeholder="–" style="width:42px;padding:1px 3px;font-size:11px;display:inline-block;text-align:center"></div></td>
     <td class="num"><input type="number" step="0.01" style="width:110px" data-nkb="${k}" value="${p.betrag??''}" placeholder="€ gesamt"></td>
     <td><select data-nks="${k}" style="width:auto;padding:4px 6px;font-size:12.5px"><option value="fl" ${p.s!=='ein'?'selected':''}>Wohnfläche</option><option value="ein" ${p.s==='ein'?'selected':''}>je Einheit gleich</option></select></td>
-    <td style="text-align:center"><input type="checkbox" data-nkum="${k}" ${p.um?'checked':''} style="width:auto" title="auf Mieter umlegbar"><div style="margin-top:4px"><span class="backlink" data-nkna="${k}" style="font-size:11px;margin:0;color:var(--ink-3)">entfällt</span></div></td></tr>`;
+    <td style="text-align:center"><input type="checkbox" data-nkum="${k}" ${p.um?'checked':''} style="width:auto" title="auf Mieter umlegbar"></td></tr>`;
   }).join('');
   const p=nkProgress(o,NKJAHR);
   return `<span class="backlink" data-nkback>← alle Objekte</span>
@@ -1576,10 +1576,13 @@ function wireNK(){
       const box=document.getElementById('nkResult');
       const pr=nkProgress(o,NKJAHR);
       const leer=NK_KATS.filter(([k])=>{const pp=d.pos[k];return pp.da&&pp.um&&!(pp.betrag>0);}).map(([k,l])=>l);
-      if(!force&&(pr.fehl.length||leer.length||pr.offen.length)){
+      const na=NKDATA[o.id]?.na||{};
+      const nichtUm=NK_KATS.filter(([k])=>{const pp=d.pos[k];return !na[k]&&pp.betrag>0&&!pp.um;}).map(([k,l])=>l);
+      if(!force&&(pr.fehl.length||leer.length||pr.offen.length||nichtUm.length)){
         box.innerHTML=`<div class="card"><h3>⚠︎ Vollständigkeits-Check</h3>
         ${pr.fehl.length?`<div class="alert warn" style="padding-right:12px"><b>Zu wenige Belege:</b><br>${pr.fehl.map(esc).join('<br>')}</div>`:''}
         ${leer.length?`<div class="alert warn" style="padding-right:12px"><b>Beleg-Haken gesetzt, aber kein Betrag:</b> ${leer.map(esc).join(', ')}</div>`:''}
+        ${nichtUm.length?`<div class="alert" style="padding-right:12px"><b>Betrag erfasst, aber „umlegbar" ist AUS</b> – diese Kosten würden NICHT abgerechnet: ${nichtUm.map(esc).join(', ')}. Haken in der Spalte „umlegbar" wieder setzen, falls das keine Absicht ist.</div>`:''}
         ${pr.offen.length?`<div class="alert info" style="padding-right:12px"><b>Noch ohne Beleg/Betrag:</b> ${pr.offen.map(esc).join(', ')}<br><span class="note">Wenn eine Position bei diesem Objekt gar nicht existiert, markiere sie in der Checkliste als „entfällt" – dann zählt sie nicht mehr mit.</span></div>`:''}
         <p class="note">Fehlende Belege einfach später nachladen – oder bewusst ohne sie abrechnen:</p>
         <div class="btnrow"><button class="btn" id="nkForce">Trotzdem Abrechnung erstellen</button></div></div>`;
