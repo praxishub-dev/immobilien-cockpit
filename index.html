@@ -1302,12 +1302,14 @@ function briefNK(o,r,von,bis){
   const e=r.e;
   const zeile=x=>`  ${x.label}: ${EUR2(x.gesamt)} gesamt · Schlüssel ${x.schl} · Ihr Anteil ${EUR2(Math.round(x.anteil*100)/100)}`;
   const nachz=r.saldo>0;
-  return `${esc(e.mieter||'Mieter/in')}
-${esc(e.bezeichnung)}, ${esc(o.adresse||o.name)}
+  return `${e.mieter||'Mieter/in'}
+${e.bezeichnung}, ${o.adresse||o.name}
+
+Bückeburg, den ${new Date().toLocaleDateString('de-DE')}
 
 Betriebskostenabrechnung ${von.getFullYear()}
 
-Sehr geehrte/r ${esc(e.mieter||'Mieter/in')},
+Sehr geehrte/r ${e.mieter||'Mieter/in'},
 
 hiermit erhalten Sie die Abrechnung der Betriebskosten für den Zeitraum ${von.toLocaleDateString('de-DE')} bis ${bis.toLocaleDateString('de-DE')}${r.days<r.totalDays?` (Ihr Nutzungszeitraum ab ${r.start.toLocaleDateString('de-DE')}, ${r.days} von ${r.totalDays} Tagen anteilig)`:''}.
 
@@ -1415,7 +1417,7 @@ function wireNK(){
       <td class="num">${r.e.flaeche??'–'} m²</td><td class="num">${r.days}/${r.totalDays} T.</td>
       <td class="num">${EUR2(Math.round(r.kosten*100)/100)}</td><td class="num">${EUR2(Math.round(r.voraus*100)/100)}</td>
       <td class="num"><b style="color:${r.saldo>0?'var(--bad)':'var(--good)'}">${r.saldo>0?'Nachz. ':'Guth. '}${EUR2(Math.abs(Math.round(r.saldo*100)/100))}</b></td>
-      <td>${r.e.mieter?`<button class="btn small" data-nkbrief="${i}">✉ Brief</button>`:'<span class="mut">Eigentümer</span>'}</td></tr>`).join('');
+      <td style="white-space:nowrap">${r.e.mieter?`<button class="btn small" data-nkbrief="${i}">✉ Text</button> <button class="btn small" data-nkpdf="${i}">⎙ PDF</button>`:'<span class="mut">Eigentümer</span>'}</td></tr>`).join('');
       const eigAnteil=c.res.filter(r=>!r.e.mieter).reduce((s,r)=>s+r.kosten,0)
         +c.res.filter(r=>r.e.mieter).reduce((s,r)=>s+((r.totalDays-r.days)/r.totalDays)*0,0);
       box.innerHTML=`<div class="card"><h3>Abrechnung ${NKJAHR}</h3>
@@ -1425,6 +1427,9 @@ function wireNK(){
       box.querySelectorAll('[data-nkbrief]').forEach(el=>el.addEventListener('click',()=>{
         const r=c.res[+el.dataset.nkbrief];
         textDialog('NK-Abrechnung '+NKJAHR+': '+(r.e.mieter||r.e.bezeichnung), briefNK(o,r,c.von,c.bis));
+      }));
+      box.querySelectorAll('[data-nkpdf]').forEach(el=>el.addEventListener('click',()=>{
+        nkPdf(o,c.res[+el.dataset.nkpdf],c);
       }));
       if(window.innerWidth<=840){ mobileTables(box); }
     };
@@ -1500,6 +1505,59 @@ async function nkUpload(files,o){
   nkSave();
   lines.push('<b>'+done+' Beleg(e) übernommen.</b> Ansicht aktualisiert sich …'); show();
   setTimeout(render,2200);
+}
+
+/* ---- Brief als druckbares PDF (über den Browser-Druckdialog) ---- */
+function briefNKHtml(o,r,von,bis){
+  const e=r.e;
+  const nachz=r.saldo>0;
+  const heute=new Date().toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit',year:'numeric'});
+  const rows=r.posten.map(x=>`<tr><td>${esc(x.label)}</td><td class="n">${EUR2(x.gesamt)}</td><td>${esc(x.schl)}</td><td class="n">${EUR2(Math.round(x.anteil*100)/100)}</td></tr>`).join('');
+  return `<!DOCTYPE html><html lang="de"><head><meta charset="UTF-8"><title>Betriebskostenabrechnung ${von.getFullYear()} – ${esc(e.mieter||e.bezeichnung)}</title>
+<style>
+@page{size:A4;margin:22mm 20mm}
+body{font-family:Helvetica,Arial,sans-serif;font-size:11pt;color:#111;line-height:1.5;max-width:640px;margin:24px auto;padding:0 16px}
+.abs{font-size:8pt;color:#555;border-bottom:.5pt solid #999;padding-bottom:2px;margin-bottom:26px}
+.empf{margin-bottom:34px;white-space:pre-line}
+.datum{text-align:right;margin-bottom:22px}
+h1{font-size:13pt;margin:0 0 16px}
+table{width:100%;border-collapse:collapse;margin:14px 0;font-size:10.5pt}
+th{text-align:left;border-bottom:1pt solid #111;padding:5px 8px;font-size:9pt;text-transform:uppercase;letter-spacing:.4px}
+td{padding:5px 8px;border-bottom:.5pt solid #ccc}
+td.n,th.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+tr.sum td{border-top:1.5pt solid #111;border-bottom:none;font-weight:bold}
+.ergebnis{margin:16px 0;padding:10px 14px;border:1pt solid #111;font-weight:bold}
+.note{font-size:9pt;color:#555;margin-top:26px}
+.sig{margin-top:44px}
+@media print{body{margin:0;max-width:none;padding:0}}
+</style></head><body>
+<div class="abs">Specht &amp; Waschkowski Immobilien eGbR</div>
+<div class="empf">${esc(e.mieter||'Mieter/in')}
+${esc(e.bezeichnung)}
+${esc(o.adresse||o.name)}</div>
+<div class="datum">Bückeburg, den ${heute}</div>
+<h1>Betriebskostenabrechnung ${von.getFullYear()}<br><span style="font-weight:normal;font-size:10.5pt">Abrechnungszeitraum ${von.toLocaleDateString('de-DE')} – ${bis.toLocaleDateString('de-DE')}${r.days<r.totalDays?` · Ihr Nutzungszeitraum ab ${r.start.toLocaleDateString('de-DE')} (${r.days} von ${r.totalDays} Tagen anteilig)`:''}</span></h1>
+<p>Sehr geehrte/r ${esc(e.mieter||'Mieter/in')},</p>
+<p>hiermit erhalten Sie die Abrechnung der Betriebskosten für die oben genannte Mieteinheit.</p>
+<table>
+<thead><tr><th>Kostenart</th><th class="n">Gesamtkosten</th><th>Verteilerschlüssel</th><th class="n">Ihr Anteil</th></tr></thead>
+<tbody>${rows}
+<tr class="sum"><td colspan="3">Summe Ihres Kostenanteils</td><td class="n">${EUR2(Math.round(r.kosten*100)/100)}</td></tr>
+<tr><td colspan="3">abzüglich geleisteter Vorauszahlungen</td><td class="n">− ${EUR2(Math.round(r.voraus*100)/100)}</td></tr>
+</tbody></table>
+<div class="ergebnis">${nachz?`Nachzahlung zu Ihren Lasten: ${EUR2(Math.round(r.saldo*100)/100)}`:`Guthaben zu Ihren Gunsten: ${EUR2(Math.round(-r.saldo*100)/100)}`}</div>
+<p>${nachz?'Bitte überweisen Sie den Betrag innerhalb von 30 Tagen auf das Ihnen bekannte Mietkonto.':'Der Betrag wird Ihnen in den nächsten Tagen erstattet bzw. mit der nächsten Mietzahlung verrechnet.'}</p>
+<p>Die zugrunde liegenden Belege können Sie nach Terminvereinbarung einsehen (§ 259 BGB).</p>
+<p class="sig">Mit freundlichen Grüßen<br><br><br>Specht &amp; Waschkowski Immobilien eGbR</p>
+<p class="note">Abrechnung erstellt am ${heute}. Einwendungen gegen die Abrechnung sind innerhalb von 12 Monaten nach Zugang geltend zu machen (§ 556 Abs. 3 BGB).</p>
+</body></html>`;
+}
+function nkPdf(o,r,c){
+  const w=window.open('','_blank');
+  if(!w){ alert('Popup blockiert – bitte Popups für diese Seite erlauben.'); return; }
+  w.document.write(briefNKHtml(o,r,c.von,c.bis));
+  w.document.close();
+  setTimeout(()=>{ try{w.focus();w.print();}catch(e){} },500);
 }
 /* ========== Immobilien-Rechner (portiert aus dem Standalone-Rechner) ========== */
 let RS_ = store.get('ic_rechner') || {kaufpreis:167500, eigenkapital:30000, mieteQm:9.0, wohnflaeche:54, zins:4.0, tilgung:2.0, steuersatz:47.475, nkSatz:10.57, afaSatz:2.0, instandQm:15};
