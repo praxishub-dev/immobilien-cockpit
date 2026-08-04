@@ -1372,6 +1372,12 @@ function nkGet(objId,jahr){
   return d;
 }
 function nkSave(){ store.set('ic_nk',NKDATA); }
+function nkAbsender(o){
+  const a=NKDATA[o.id]?.absender;
+  if(a&&a.trim()) return a.trim();
+  if(o.eigentuemer&&o.eigentuemer.trim()) return o.eigentuemer.trim();
+  return 'Specht & Waschkowski Immobilien eGbR';
+}
 function nkIst(p){ return (p&&p.belege&&p.belege.length)||(p&&p.da?1:0); }
 function nkProgress(o,jahr){
   const d=NKDATA[o.id]?.[jahr]; const soll=NKDATA[o.id]?.soll||{}; const na=NKDATA[o.id]?.na||{};
@@ -1434,6 +1440,9 @@ function viewNKDetail(o){
   <p class="note" style="margin-top:8px">Umlage nach Wohnfläche (§556a BGB Standard) oder je Einheit. Mieterwechsel werden tagesanteilig ab Mietbeginn gerechnet, Leerstandsanteile trägst du als Eigentümer. Heizung/Warmwasser: Werte der externen Abrechnung (Techem/ista) als Gesamtbetrag – bei eigener Heizungsabrechnung HeizkostenV beachten (50–70 % verbrauchsabhängig, hier nicht abgebildet). Gewerbeeinheiten: ggf. USt auf NK beachten. Keine Steuer-/Rechtsberatung.</p>
   </div>
   <div id="nkResult"></div>
+  <div class="card"><h3>Absender für die Briefe (Text &amp; PDF)</h3>
+  <textarea id="nkAbs" rows="3" placeholder="Name / Firma&#10;Straße Hausnr.&#10;PLZ Ort">${esc(nkAbsender(o))}</textarea>
+  <p class="note" style="margin-top:6px">Vorbelegt aus den Objektdaten (GbR bzw. privater Eigentümer). Hier ändern, falls das Objekt anders gehalten wird – die Änderung gilt dauerhaft für dieses Objekt und synchronisiert. Erste Zeile = Name in der Grußformel, alle Zeilen = Absenderzeile im Briefkopf.</p></div>
   <div class="card"><h3>Belege hochladen – KI wertet aus</h3>
   <p class="note">Wähle den ganzen Beleg-Ordner (z.B. „NK Abrechnung ${NKJAHR}") oder einzelne PDFs/Fotos. Die App liest jeden Beleg per Claude-API (dein API-Key aus den Einstellungen), erkennt Kostenart, Betrag und Jahr und füllt die Checkliste. iCloud-Dateien lädt dein Mac beim Auswählen automatisch. Kosten: Cent-Beträge je Beleg. Beträge danach kurz prüfen!</p>
   <div class="btnrow">
@@ -1493,7 +1502,7 @@ ${nachz?`Es ergibt sich eine Nachzahlung von ${EUR2(Math.round(r.saldo*100)/100)
 Die Belege können Sie nach Terminvereinbarung einsehen (§ 259 BGB).
 
 Mit freundlichen Grüßen
-Specht & Waschkowski Immobilien eGbR`;
+${nkAbsender(o)}`;
 }
 function nkImport(file,msgEl){
   const rd=new FileReader();
@@ -1551,6 +1560,8 @@ function wireNK(){
       else { pos.betrag=null; pos.da=false; pos.beleg=''; }
       save(); render();
     }));
+    const abs=document.getElementById('nkAbs');
+    if(abs) abs.addEventListener('change',()=>{ NKDATA[o.id].absender=abs.value; save(); });
     const von=document.getElementById('nkVon'), bis=document.getElementById('nkBis');
     if(von) von.addEventListener('change',()=>{d.von=von.value;save();});
     if(bis) bis.addEventListener('change',()=>{d.bis=bis.value;save();});
@@ -1710,7 +1721,7 @@ tr.sum td{border-top:1.5pt solid #111;border-bottom:none;font-weight:bold}
 .sig{margin-top:44px}
 @media print{body{margin:0;max-width:none;padding:0}}
 </style></head><body>
-<div class="abs">Specht &amp; Waschkowski Immobilien eGbR</div>
+<div class="abs">${nkAbsender(o).split('\n').map(esc).join(' · ')}</div>
 <div class="empf">${esc(e.mieter||'Mieter/in')}
 ${esc(e.bezeichnung)}
 ${esc(o.adresse||o.name)}</div>
@@ -1727,7 +1738,7 @@ ${esc(o.adresse||o.name)}</div>
 <div class="ergebnis">${nachz?`Nachzahlung zu Ihren Lasten: ${EUR2(Math.round(r.saldo*100)/100)}`:`Guthaben zu Ihren Gunsten: ${EUR2(Math.round(-r.saldo*100)/100)}`}</div>
 <p>${nachz?'Bitte überweisen Sie den Betrag innerhalb von 30 Tagen auf das Ihnen bekannte Mietkonto.':'Der Betrag wird Ihnen in den nächsten Tagen erstattet bzw. mit der nächsten Mietzahlung verrechnet.'}</p>
 <p>Die zugrunde liegenden Belege können Sie nach Terminvereinbarung einsehen (§ 259 BGB).</p>
-<p class="sig">Mit freundlichen Grüßen<br><br><br>Specht &amp; Waschkowski Immobilien eGbR</p>
+<p class="sig">Mit freundlichen Grüßen<br><br><br>${esc(nkAbsender(o).split('\n')[0])}</p>
 <p class="note">Abrechnung erstellt am ${heute}. Einwendungen gegen die Abrechnung sind innerhalb von 12 Monaten nach Zugang geltend zu machen (§ 556 Abs. 3 BGB).</p>
 </body></html>`;
 }
