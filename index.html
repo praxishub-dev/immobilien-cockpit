@@ -532,6 +532,7 @@ function render(){
     if(b.kind==='erh') textDialog('Mieterhöhung: '+u.e.bezeichnung, briefErhoehung(u.o,u.e));
     else textDialog('Zahlungserinnerung: '+u.e.bezeichnung, briefMahnung(u.o,u.e));
   }));
+  m.querySelectorAll('[data-open-view]').forEach(el=>el.addEventListener('click',()=>{VIEW=el.dataset.openView;DETAIL=null;render();window.scrollTo(0,0);}));
   m.querySelectorAll('[data-alertoff]').forEach(el=>el.addEventListener('click',ev=>{
     ev.stopPropagation();
     const d=store.get('ic_alerts_off')||[];
@@ -618,29 +619,51 @@ function viewDash(){
   const offA=store.get('ic_alerts_off')||[];
   const aKey=a=>a.o.name+'|'+a.n;
   const visAlerts=alerts.filter(a=>!offA.includes(aKey(a)));
-  const potenzial=units.reduce((s,{o,e})=>s+mietCheck(o,e).potenzial,0);
-  const maxV=Math.max(...DATA.objekte.map(o=>Math.max(o.einheiten.reduce((s,e)=>s+(e.kaltmiete||0),0),o.finanzierung?.rate||0)));
-  const chart=DATA.objekte.map(o=>{
-    const miete=o.einheiten.reduce((s,e)=>s+(e.kaltmiete||0),0);
-    const r=o.finanzierung?.rate||0;
-    return `<div class="crow"><div class="cl" title="${esc(o.name)}">${esc(o.name)}</div><div class="bars">
-      <div class="bar" style="width:${maxV?miete/maxV*72:0}%;background:var(--s1)"><span>${EUR(miete)}</span></div>
-      <div class="bar" style="width:${maxV?r/maxV*72:0}%;background:var(--s2)"><span>${EUR(Math.round(r))}</span></div></div></div>`;
-  }).join('');
+  // Offene Mieten (kumuliert über alle Objekte)
+  let offenSum=0, offenMieter=0;
+  units.forEach(({o,e})=>{ const z=zahlungsStatus(o,e); if(z.kind==='open'){ offenSum+=z.sum; offenMieter++; } });
+  offenSum=Math.round(offenSum*100)/100;
+  // Nächste Mietsteigerungen (Top 3 nach Potenzial)
+  const steig=units.map(({o,e})=>({o,e,c:mietCheck(o,e)}))
+    .filter(x=>x.c.potenzial>50)
+    .sort((a,b)=>b.c.potenzial-a.c.potenzial).slice(0,3);
+  // Nächstes Verkaufspotential (§23-Frist am nächsten, mit Wert)
+  const vk=DATA.objekte.map(o=>{
+    const fr=(typeof fristFrei==='function')?fristFrei(o):null;
+    const mw=(typeof marktwertHeute==='function')?marktwertHeute(o):null;
+    const rs=(typeof restschuldHeute==='function')?restschuldHeute(o):null;
+    return {o,fr,mw,rs,netto:(mw&&rs!=null)?mw.wert-rs:null};
+  }).filter(x=>x.fr).sort((a,b)=>a.fr.datum-b.fr.datum).slice(0,2);
+  // Nächste Erinnerungen (nicht ausgeblendet, ab heute, die nächsten 3)
+  const dism=store.get('ic_dismissed')||[];
+  const heuteIso=isoDate(today());
+  const remNext=autoReminders().filter(r=>!dism.includes(r.titel+'|'+r.datum)&&r.datum>=heuteIso).slice(0,3);
   const ts=store.get('ic_data_ts');
   const standTxt=ts?new Date(ts).toLocaleString('de-DE',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})+' Uhr':esc(DATA.meta?.stand||'');
-  return `<h2>Übersicht</h2><p class="sub">Letzte Datenänderung: ${standTxt} · ${DATA.objekte.length} Objekte, ${units.length} Einheiten · Basisdaten vom ${esc(DATA.meta?.stand||'–')}</p>
+  return `<h2>Übersicht</h2><p class="sub">Letzte Datenänderung: ${standTxt} · ${DATA.objekte.length} Objekte, ${units.length} Einheiten</p>
   <div class="grid kpis">
-    <div class="kpi"><div class="l">Kaltmiete / Monat</div><div class="v">${EUR(kalt)}</div><div class="d">warm ${EUR(Math.round(warmS))}</div></div>
-    <div class="kpi"><div class="l">Kapitaldienst / Monat</div><div class="v">${EUR(Math.round(rate))}</div><div class="d">Summe aller Raten</div></div>
-    <div class="kpi"><div class="l">Cashflow (kalt − Rate)</div><div class="v" style="color:${cf>=0?'var(--good)':'var(--bad)'}">${cf>=0?'+':''}${EUR(Math.round(cf))}</div><div class="d">vor NK, Steuern, Rücklagen</div></div>
-    <div class="kpi"><div class="l">Mieterhöhungs-Potenzial</div><div class="v">+${EUR(potenzial)}</div><div class="d">pro Monat, s. Mietspiegel-Check</div></div>
-    <div class="kpi"><div class="l">Warnungen</div><div class="v" style="color:${visAlerts.length?'var(--bad)':'var(--good)'}">${visAlerts.length}</div><div class="d">offene Punkte</div></div>
+    <div class="kpi"><div class="l">Mieteinnahmen / Monat</div><div class="v">${EUR(kalt)}</div><div class="d">kalt · warm ${EUR(Math.round(warmS))}</div></div>
+    <div class="kpi"><div class="l">Kosten / Monat</div><div class="v">${EUR(Math.round(rate))}</div><div class="d">Kapitaldienst (Summe Raten)</div></div>
+    <div class="kpi"><div class="l">Cashflow / Monat</div><div class="v" style="color:${cf>=0?'var(--good)':'var(--bad)'}">${cf>=0?'+':''}${EUR(Math.round(cf))}</div><div class="d">kalt − Rate, vor NK &amp; Steuern</div></div>
+    <div class="kpi" data-open-view="bank" style="cursor:pointer"><div class="l">Offene Mieten</div><div class="v" style="color:${offenSum>0?'var(--bad)':'var(--good)'}">${offenSum>0?EUR2(offenSum):'0 €'}</div><div class="d">${offenMieter?offenMieter+' Mieter im Rückstand':'alles bezahlt'}</div></div>
   </div>
   ${visAlerts.length?`<div class="card"><h3>Handlungsbedarf</h3>${visAlerts.map(a=>`<div class="alert${a.bad?'':' warn'}"><button class="ax" data-alertoff="${esc(aKey(a))}" title="Ausblenden">×</button><b>${esc(a.o.name)}:</b> ${esc(a.n)}</div>`).join('')}${offA.length?`<p class="note" style="margin:8px 0 0"><span class="backlink" data-alertreset>${offA.length} ausgeblendete Warnung(en) wiederherstellen</span></p>`:''}</div>`:(offA.length?`<div class="card"><p class="note" style="margin:0"><span class="backlink" data-alertreset>${offA.length} ausgeblendete Warnung(en) wiederherstellen</span></p></div>`:'')}
-  <div class="card"><h3>Kaltmiete vs. Rate je Objekt</h3>
-    <div class="legend"><span><i style="background:var(--s1)"></i>Kaltmiete</span><span><i style="background:var(--s2)"></i>Darlehensrate</span></div>
-    <div class="chart">${chart}</div></div>`;
+  <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(300px,1fr))">
+  <div class="card" style="margin-bottom:0"><h3>↗ Nächste Mietsteigerungen</h3>
+    ${steig.length?steig.map(x=>`<div class="row" style="display:flex;justify-content:space-between;gap:10px;padding:5px 0;font-size:13.5px;border-bottom:1px solid var(--border)">
+      <span style="min-width:0"><b>${esc(x.e.bezeichnung)}</b> <span class="mut">· ${esc(x.o.ort||x.o.name)}</span><br><span class="mut">${x.c.naechsteErhoehung?(x.c.naechsteErhoehung<=today()?'ab sofort möglich':'ab '+x.c.naechsteErhoehung.toLocaleDateString('de-DE')):''}</span></span>
+      <b style="color:var(--good);white-space:nowrap">+${EUR(x.c.potenzial)}/M.</b></div>`).join(''):'<p class="note">Aktuell kein nennenswertes Potenzial.</p>'}
+    <p class="note" style="margin-top:8px"><span class="backlink" data-open-view="miet" style="margin:0">→ Mietspiegel-Check</span></p></div>
+  <div class="card" style="margin-bottom:0"><h3>🏷 Nächstes Verkaufspotential</h3>
+    ${vk.length?vk.map(x=>`<div style="padding:5px 0;font-size:13.5px;border-bottom:1px solid var(--border)">
+      <b>${esc(x.o.name)}</b><br>
+      <span class="mut">${x.fr.frei?'<span class="badge b-good">steuerfrei verkaufbar</span>':'steuerfrei ab '+x.fr.datum.toLocaleDateString('de-DE')+' ('+x.fr.restJahre+' J. '+x.fr.restMonate+' M.)'}</span><br>
+      <span class="mut">Marktwert ~</span> <b>${x.mw?EUR(x.mw.wert):'–'}</b>${x.netto!=null?` <span class="mut">· netto nach Restschuld</span> <b style="color:${x.netto>=0?'var(--good)':'var(--bad)'}">${EUR(x.netto)}</b>`:''}</div>`).join(''):'<p class="note">Keine Verkaufsdaten.</p>'}
+    <p class="note" style="margin-top:8px"><span class="backlink" data-open-view="verkauf" style="margin:0">→ Verkauf</span></p></div>
+  <div class="card" style="margin-bottom:0"><h3>⏰ Nächste Erinnerungen</h3>
+    ${remNext.length?remNext.map(r=>`<div style="padding:5px 0;font-size:13.5px;border-bottom:1px solid var(--border)"><b>${D(r.datum)}</b> · ${esc(r.titel)}</div>`).join(''):'<p class="note">Nichts anstehend.</p>'}
+    <p class="note" style="margin-top:8px"><span class="backlink" data-open-view="erinner" style="margin:0">→ alle Erinnerungen</span></p></div>
+  </div>`;
 }
 
 /* ========== Objekte ========== */
