@@ -625,8 +625,8 @@ function viewDash(){
   offenSum=Math.round(offenSum*100)/100;
   // Nächste Mietsteigerungen (Top 3 nach Potenzial)
   const steig=units.map(({o,e})=>({o,e,c:mietCheck(o,e)}))
-    .filter(x=>x.c.potenzial>50)
-    .sort((a,b)=>b.c.potenzial-a.c.potenzial).slice(0,3);
+    .filter(x=>x.c.potenzial>30)
+    .sort((a,b)=>b.c.potenzial-a.c.potenzial).slice(0,6);
   // Nächstes Verkaufspotential (§23-Frist am nächsten, mit Wert)
   const vk=DATA.objekte.map(o=>{
     const fr=(typeof fristFrei==='function')?fristFrei(o):null;
@@ -651,7 +651,7 @@ function viewDash(){
   <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(300px,1fr))">
   <div class="card" style="margin-bottom:0"><h3>↗ Nächste Mietsteigerungen</h3>
     ${steig.length?steig.map(x=>`<div class="row" style="display:flex;justify-content:space-between;gap:10px;padding:5px 0;font-size:13.5px;border-bottom:1px solid var(--border)">
-      <span style="min-width:0"><b>${esc(x.e.bezeichnung)}</b> <span class="mut">· ${esc(x.o.ort||x.o.name)}</span><br><span class="mut">${x.c.naechsteErhoehung?(x.c.naechsteErhoehung<=today()?'ab sofort möglich':'ab '+x.c.naechsteErhoehung.toLocaleDateString('de-DE')):''}</span></span>
+      <span style="min-width:0"><b>${esc(x.e.bezeichnung)}</b><br><span class="mut">${esc(x.o.adresse||x.o.name)}</span><br><span class="mut">${x.c.naechsteErhoehung?(x.c.naechsteErhoehung<=today()?'ab sofort möglich':'ab '+x.c.naechsteErhoehung.toLocaleDateString('de-DE')):''}</span></span>
       <b style="color:var(--good);white-space:nowrap">+${EUR(x.c.potenzial)}/M.</b></div>`).join(''):'<p class="note">Aktuell kein nennenswertes Potenzial.</p>'}
     <p class="note" style="margin-top:8px"><span class="backlink" data-open-view="miet" style="margin:0">→ Mietspiegel-Check</span></p></div>
   <div class="card" style="margin-bottom:0"><h3>🏷 Nächstes Verkaufspotential</h3>
