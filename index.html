@@ -1209,10 +1209,18 @@ function nkGet(objId,jahr){
   return d;
 }
 function nkSave(){ store.set('ic_nk',NKDATA); }
+function nkIst(p){ return (p&&p.belege&&p.belege.length)||(p&&p.da?1:0); }
 function nkProgress(o,jahr){
-  const d=NKDATA[o.id]?.[jahr]; if(!d) return {da:0,rel:8};
-  const da=NK_KATS.filter(([k])=>d.pos[k]?.da).length;
-  return {da,rel:NK_KATS.length};
+  const d=NKDATA[o.id]?.[jahr]; const soll=NKDATA[o.id]?.soll||{};
+  const fehl=[];
+  let da=0;
+  NK_KATS.forEach(([k,label])=>{
+    const p=d?.pos?.[k]; const ist=nkIst(p); const need=+soll[k]||0;
+    const ok=need>0?ist>=need:!!p?.da;
+    if(ok) da++;
+    else if(need>0) fehl.push(label+' ('+ist+' von '+need+' Belegen)');
+  });
+  return {da,rel:NK_KATS.length,fehl};
 }
 function viewNK(){
   if(NKSEL){ const o=DATA.objekte.find(x=>x.id===NKSEL); if(o) return viewNKDetail(o); NKSEL=null; }
@@ -1238,8 +1246,11 @@ function viewNKDetail(o){
     const belegList=(p.belege&&p.belege.length)
       ?p.belege.map((bl,bi)=>`<br><span class="mut">↳ ${esc(bl.name)} (${EUR2(bl.betrag)}) <button class="ax" data-nkdel="${k}|${bi}" title="Beleg entfernen" style="position:static;font-size:13px;padding:0 4px;color:var(--bad)">×</button></span>`).join('')
       :(p.beleg?`<br><span class="mut">↳ ${esc(p.beleg)}</span>`:'');
-    return `<tr><td><b>${esc(label)}</b>${belegList}</td>
-    <td style="text-align:center"><input type="checkbox" data-nkda="${k}" ${p.da?'checked':''} style="width:auto"></td>
+    const soll=NKDATA[o.id]?.soll||{};
+    const ist=nkIst(p); const need=+soll[k]||0;
+    const warnB=need>0&&ist<need;
+    return `<tr><td><b>${esc(label)}</b>${warnB?` <span class="badge b-warn">${ist}/${need}</span>`:''}${belegList}</td>
+    <td style="text-align:center"><input type="checkbox" data-nkda="${k}" ${p.da?'checked':''} style="width:auto"><div class="mut" style="font-size:10.5px;white-space:nowrap;margin-top:4px">Soll <input type="number" min="0" max="20" data-nksoll="${k}" value="${need||''}" placeholder="–" style="width:42px;padding:1px 3px;font-size:11px;display:inline-block;text-align:center"></div></td>
     <td class="num"><input type="number" step="0.01" style="width:110px" data-nkb="${k}" value="${p.betrag??''}" placeholder="€ gesamt"></td>
     <td><select data-nks="${k}" style="width:auto;padding:4px 6px;font-size:12.5px"><option value="fl" ${p.s!=='ein'?'selected':''}>Wohnfläche</option><option value="ein" ${p.s==='ein'?'selected':''}>je Einheit gleich</option></select></td>
     <td style="text-align:center"><input type="checkbox" data-nkum="${k}" ${p.um?'checked':''} style="width:auto" title="auf Mieter umlegbar"></td></tr>`;
@@ -1378,10 +1389,27 @@ function wireNK(){
     if(ub2) ub2.addEventListener('click',()=>uf2.click());
     if(uf1) uf1.addEventListener('change',()=>nkUpload(uf1.files,o));
     if(uf2) uf2.addEventListener('change',()=>nkUpload(uf2.files,o));
-    const cb=document.getElementById('nkCalc');
-    if(cb) cb.addEventListener('click',()=>{
-      const c=nkCalc(o);
+    document.querySelectorAll('[data-nksoll]').forEach(el=>el.addEventListener('change',()=>{
+      NKDATA[o.id].soll=NKDATA[o.id].soll||{};
+      const v=parseInt(el.value);
+      if(isNaN(v)||v<=0) delete NKDATA[o.id].soll[el.dataset.nksoll]; else NKDATA[o.id].soll[el.dataset.nksoll]=v;
+      save(); render();
+    }));
+    const doCalc=(force)=>{
       const box=document.getElementById('nkResult');
+      const pr=nkProgress(o,NKJAHR);
+      const leer=NK_KATS.filter(([k])=>{const pp=d.pos[k];return pp.da&&pp.um&&!(pp.betrag>0);}).map(([k,l])=>l);
+      if(!force&&(pr.fehl.length||leer.length)){
+        box.innerHTML=`<div class="card"><h3>⚠︎ Vollständigkeits-Check</h3>
+        ${pr.fehl.length?`<div class="alert warn" style="padding-right:12px"><b>Zu wenige Belege:</b><br>${pr.fehl.map(esc).join('<br>')}</div>`:''}
+        ${leer.length?`<div class="alert warn" style="padding-right:12px"><b>Beleg-Haken gesetzt, aber kein Betrag:</b> ${leer.map(esc).join(', ')}</div>`:''}
+        <p class="note">Fehlende Belege einfach später nachladen – oder bewusst ohne sie abrechnen:</p>
+        <div class="btnrow"><button class="btn" id="nkForce">Trotzdem Abrechnung erstellen</button></div></div>`;
+        document.getElementById('nkForce').addEventListener('click',()=>doCalc(true));
+        if(window.innerWidth<=840) mobileTables(box);
+        return;
+      }
+      const c=nkCalc(o);
       if(!c||!c.posList.length){ box.innerHTML='<div class="alert warn">Keine umlegbaren Positionen mit Betrag erfasst.</div>'; return; }
       const rows=c.res.map((r,i)=>`<tr><td><b>${esc(r.e.bezeichnung)}</b><br><span class="mut">${esc(r.e.mieter||'Leerstand')}</span></td>
       <td class="num">${r.e.flaeche??'–'} m²</td><td class="num">${r.days}/${r.totalDays} T.</td>
@@ -1399,7 +1427,9 @@ function wireNK(){
         textDialog('NK-Abrechnung '+NKJAHR+': '+(r.e.mieter||r.e.bezeichnung), briefNK(o,r,c.von,c.bis));
       }));
       if(window.innerWidth<=840){ mobileTables(box); }
-    });
+    };
+    const cb=document.getElementById('nkCalc');
+    if(cb) cb.addEventListener('click',()=>doCalc(false));
   }
 }
 
