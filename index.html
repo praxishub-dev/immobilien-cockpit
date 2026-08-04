@@ -1372,6 +1372,17 @@ function nkGet(objId,jahr){
   return d;
 }
 function nkSave(){ store.set('ic_nk',NKDATA); }
+function nkAnschrift(o,e){
+  const a=NKDATA[o.id]?.anschrift?.[e.id];
+  if(a&&a.trim()) return a.trim();
+  return `${e.mieter||'Mieter/in'}\n${e.bezeichnung}\n${o.adresse||o.name}`;
+}
+function nkSaveAnschrift(objId,unitId,text){
+  NKDATA[objId]=NKDATA[objId]||{};
+  NKDATA[objId].anschrift=NKDATA[objId].anschrift||{};
+  NKDATA[objId].anschrift[unitId]=text;
+  nkSave();
+}
 function nkAbsender(o){
   const a=NKDATA[o.id]?.absender;
   if(a&&a.trim()) return a.trim();
@@ -1480,8 +1491,7 @@ function briefNK(o,r,von,bis){
   const e=r.e;
   const zeile=x=>`  ${x.label}: ${EUR2(x.gesamt)} gesamt · Schlüssel ${x.schl} · Ihr Anteil ${EUR2(Math.round(x.anteil*100)/100)}`;
   const nachz=r.saldo>0;
-  return `${e.mieter||'Mieter/in'}
-${e.bezeichnung}, ${o.adresse||o.name}
+  return `${nkAnschrift(o,e)}
 
 Bückeburg, den ${new Date().toLocaleDateString('de-DE')}
 
@@ -1719,12 +1729,14 @@ tr.sum td{border-top:1.5pt solid #111;border-bottom:none;font-weight:bold}
 .ergebnis{margin:16px 0;padding:10px 14px;border:1pt solid #111;font-weight:bold}
 .note{font-size:9pt;color:#555;margin-top:26px}
 .sig{margin-top:44px}
-@media print{body{margin:0;max-width:none;padding:0}}
+[contenteditable]:hover{outline:1.5px dashed #2a78d6;outline-offset:3px}
+@media print{body{margin:0;max-width:none;padding:0}.no-print{display:none!important}[contenteditable]:hover{outline:none}}
 </style></head><body>
-<div class="abs">${nkAbsender(o).split('\n').map(esc).join(' · ')}</div>
-<div class="empf">${esc(e.mieter||'Mieter/in')}
-${esc(e.bezeichnung)}
-${esc(o.adresse||o.name)}</div>
+<div class="toolbar no-print" style="position:sticky;top:0;background:#fff8dc;border:1px solid #d9c869;border-radius:8px;padding:10px 14px;margin-bottom:18px;font-size:10pt">
+✏️ <b>Anschrift und Texte sind anklickbar und direkt änderbar.</b> Änderungen an der Anschrift werden für diesen Mieter gespeichert.
+<button onclick="window.print()" style="float:right;padding:6px 16px;font-size:10pt;cursor:pointer">🖨 Drucken / Als PDF sichern</button></div>
+<div class="abs" contenteditable="true">${nkAbsender(o).split('\n').map(esc).join(' · ')}</div>
+<div class="empf" contenteditable="true" id="empf">${esc(nkAnschrift(o,e))}</div>
 <div class="datum">Bückeburg, den ${heute}</div>
 <h1>Betriebskostenabrechnung ${von.getFullYear()}<br><span style="font-weight:normal;font-size:10.5pt">Abrechnungszeitraum ${von.toLocaleDateString('de-DE')} – ${bis.toLocaleDateString('de-DE')}${r.days<r.totalDays?` · Ihr Nutzungszeitraum ab ${r.start.toLocaleDateString('de-DE')} (${r.days} von ${r.totalDays} Tagen anteilig)`:''}</span></h1>
 <p>Sehr geehrte/r ${esc(e.mieter||'Mieter/in')},</p>
@@ -1740,6 +1752,13 @@ ${esc(o.adresse||o.name)}</div>
 <p>Die zugrunde liegenden Belege können Sie nach Terminvereinbarung einsehen (§ 259 BGB).</p>
 <p class="sig">Mit freundlichen Grüßen<br><br><br>${esc(nkAbsender(o).split('\n')[0])}</p>
 <p class="note">Abrechnung erstellt am ${heute}. Einwendungen gegen die Abrechnung sind innerhalb von 12 Monaten nach Zugang geltend zu machen (§ 556 Abs. 3 BGB).</p>
+<script>
+document.querySelectorAll('p,.datum,h1').forEach(el=>el.setAttribute('contenteditable','true'));
+var _e=document.getElementById('empf');
+if(_e) _e.addEventListener('input',function(){
+  try{ if(window.opener&&window.opener.nkSaveAnschrift) window.opener.nkSaveAnschrift(${JSON.stringify(o.id)},${JSON.stringify(e.id)},_e.innerText); }catch(err){}
+});
+</scr`+`ipt>
 </body></html>`;
 }
 function nkPdf(o,r,c){
@@ -1747,7 +1766,7 @@ function nkPdf(o,r,c){
   if(!w){ alert('Popup blockiert – bitte Popups für diese Seite erlauben.'); return; }
   w.document.write(briefNKHtml(o,r,c.von,c.bis));
   w.document.close();
-  setTimeout(()=>{ try{w.focus();w.print();}catch(e){} },500);
+  try{w.focus();}catch(e){}
 }
 /* ========== Immobilien-Rechner (portiert aus dem Standalone-Rechner) ========== */
 let RS_ = store.get('ic_rechner') || {kaufpreis:167500, eigenkapital:30000, mieteQm:9.0, wohnflaeche:54, zins:4.0, tilgung:2.0, steuersatz:47.475, nkSatz:10.57, afaSatz:2.0, instandQm:15};
