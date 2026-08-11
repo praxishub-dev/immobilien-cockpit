@@ -484,6 +484,13 @@ function textDialog(titel, text){
   document.getElementById('txtDlg').showModal();
 }
 
+/* ========== Kopieren-Helfer ========== */
+function copyTxt(text,btn){
+  const done=()=>{ if(btn){ const t=btn.textContent; btn.textContent='✓'; setTimeout(()=>btn.textContent=t,1200); } };
+  if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(text).then(done).catch(()=>fallback()); }
+  else fallback();
+  function fallback(){ const ta=document.createElement('textarea'); ta.value=text; document.body.appendChild(ta); ta.select(); try{document.execCommand('copy');}catch(e){} ta.remove(); done(); }
+}
 /* ========== Router ========== */
 let VIEW='dash', DETAIL=null;
 function syncActive(){
@@ -525,6 +532,31 @@ function render(){
   m.querySelectorAll('[data-icsdirect]').forEach(el=>el.addEventListener('click',ev=>{ev.stopPropagation();const p=JSON.parse(el.dataset.icsdirect);downloadICS(p.titel,p.datum,p.notiz);}));
   m.querySelectorAll('[data-pay]').forEach(el=>el.addEventListener('click',ev=>{ev.stopPropagation();openPayDialog(el.dataset.pay);}));
   m.querySelectorAll('[data-objedit]').forEach(el=>el.addEventListener('click',ev=>{ev.stopPropagation();openObjEdit(el.dataset.objedit);}));
+  m.querySelectorAll('[data-copy]').forEach(el=>el.addEventListener('click',ev=>{ev.stopPropagation();copyTxt(el.dataset.copy,el);}));
+  m.querySelectorAll('[data-kont]').forEach(el=>el.addEventListener('change',()=>{
+    const [uid,feld]=el.dataset.kont.split(':');
+    const u=unitById(uid); if(!u) return;
+    u.e[feld]=el.value.trim()||null;
+    store.set('ic_data',DATA); render();
+  }));
+  m.querySelectorAll('[data-zae]').forEach(el=>el.addEventListener('change',()=>{
+    const [i,feld]=el.dataset.zae.split(':');
+    const o=DATA.objekte.find(x=>x.id===DETAIL); if(!o||!o.zaehler||!o.zaehler[+i]) return;
+    o.zaehler[+i][feld]=el.value;
+    store.set('ic_data',DATA); if(feld==='nummer') render();
+  }));
+  m.querySelectorAll('[data-zaedel]').forEach(el=>el.addEventListener('click',()=>{
+    const o=DATA.objekte.find(x=>x.id===DETAIL); if(!o||!o.zaehler) return;
+    o.zaehler.splice(+el.dataset.zaedel,1);
+    store.set('ic_data',DATA); render();
+  }));
+  const za=m.querySelector('#zaeAdd');
+  if(za) za.addEventListener('click',()=>{
+    const o=DATA.objekte.find(x=>x.id===DETAIL); if(!o) return;
+    o.zaehler=o.zaehler||[];
+    o.zaehler.push({art:'Wasser',nummer:'',zuordnung:''});
+    store.set('ic_data',DATA); render();
+  });
   m.querySelectorAll('[data-brief]').forEach(el=>el.addEventListener('click',ev=>{
     ev.stopPropagation();
     const b=JSON.parse(el.dataset.brief);
@@ -765,6 +797,11 @@ function viewObjektDetail(id){
     <td><span class="badge b-${c.ampel}">${esc(c.status)}</span>${c.potenzial?`<br><span class="mut">+${EUR(c.potenzial)} mögl.</span>`:''}
     ${c.naechsteErhoehung?`<br><span class="mut">Erhöhung ${c.naechsteErhoehung<=today()?'sofort möglich':'ab '+c.naechsteErhoehung.toLocaleDateString('de-DE')}</span>`:''}</td>
     <td>${zahlungsZelle(o,e)}</td>
+    <td style="min-width:190px">${e.mieter?`
+      <div style="display:flex;gap:4px;align-items:center;margin-bottom:4px"><input type="tel" placeholder="Telefon" data-kont="${e.id}:telefon" value="${esc(e.telefon||'')}" style="font-size:12px;padding:3px 6px">
+      ${e.telefon?`<a class="btn small" href="tel:${esc(String(e.telefon).replace(/[^+\d]/g,''))}" title="Anrufen">📞</a><button class="btn small" data-copy="${esc(e.telefon)}" title="Kopieren">📋</button>`:''}</div>
+      <div style="display:flex;gap:4px;align-items:center"><input type="email" placeholder="E-Mail" data-kont="${e.id}:email" value="${esc(e.email||'')}" style="font-size:12px;padding:3px 6px">
+      ${e.email?`<a class="btn small" href="mailto:${esc(e.email)}" title="Mail schreiben">✉</a><button class="btn small" data-copy="${esc(e.email)}" title="Kopieren">📋</button>`:''}</div>`:'<span class="mut">–</span>'}</td>
     <td style="white-space:nowrap"><button class="btn small" data-ics='${JSON.stringify(remind).replace(/'/g,"&#39;")}'>⏰</button>
     <button class="btn small" title="Mieterhöhungs-Schreiben erstellen" data-brief='{"kind":"erh","id":"${e.id}"}'>✉ Erhöhung</button></td></tr>`;
   }).join('');
@@ -783,8 +820,19 @@ function viewObjektDetail(id){
     <div class="kpi"><div class="l">Rate / Monat</div><div class="v">${EUR(Math.round(f.rate||0))}</div><div class="d">${f.zinsbindung_ende?'Zinsbindung bis '+D(f.zinsbindung_ende):''}</div></div>
   </div>
   <div class="card"><h3>Einheiten &amp; Mieter</h3>
-  <div style="overflow-x:auto"><table><thead><tr><th>Einheit / Mieter</th><th class="num">Fläche</th><th class="num">Kalt</th><th class="num">Warm</th><th>Beginn</th><th>Letzte Erhöhung</th><th>Mietspiegel</th><th>Zahlungen</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
-  <p class="note" style="margin-top:8px">Zahlungsstatus basiert auf den unter „Bank &amp; Zahlungen" importierten Kontoumsätzen (alle Monate). „Konto fehlt" = für dieses Objekt wurden noch keine Umsätze importiert.</p></div>
+  <div style="overflow-x:auto"><table><thead><tr><th>Einheit / Mieter</th><th class="num">Fläche</th><th class="num">Kalt</th><th class="num">Warm</th><th>Beginn</th><th>Letzte Erhöhung</th><th>Mietspiegel</th><th>Zahlungen</th><th>Kontakt</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
+  <p class="note" style="margin-top:8px">Zahlungsstatus basiert auf den unter „Bank &amp; Zahlungen" importierten Kontoumsätzen. Telefon/E-Mail direkt in die Felder eintragen – 📞 ruft an, ✉ öffnet das Mailprogramm, 📋 kopiert.</p></div>
+  <div class="card"><h3>Zähler (Gas, Wasser, Strom …)</h3>
+  <div style="overflow-x:auto"><table><thead><tr><th>Art</th><th>Zählernummer</th><th>Zuordnung (Wohnung / Allgemein)</th><th></th></tr></thead><tbody>
+  ${(o.zaehler||[]).map((z,i)=>`<tr>
+    <td><select data-zae="${i}:art" style="width:auto;padding:4px 6px">${['Wasser','Gas','Strom','Wärme','Sonstiges'].map(a=>`<option ${z.art===a?'selected':''}>${a}</option>`).join('')}</select></td>
+    <td><div style="display:flex;gap:4px;align-items:center"><input type="text" data-zae="${i}:nummer" value="${esc(z.nummer||'')}" placeholder="Nummer" style="font-family:monospace">
+    <button class="btn small" data-copy="${esc(z.nummer||'')}" title="Nummer kopieren">📋</button></div></td>
+    <td><input type="text" data-zae="${i}:zuordnung" value="${esc(z.zuordnung||'')}" placeholder="z.B. EG links / Allgemein / Heizung"></td>
+    <td><button class="ax" data-zaedel="${i}" style="position:static;color:var(--bad)">×</button></td></tr>`).join('')||''}
+  </tbody></table></div>
+  <div class="btnrow"><button class="btn" id="zaeAdd">+ Zähler hinzufügen</button></div>
+  <p class="note" style="margin-top:8px">Bei MFH je Zähler die Wohnung eintragen (z.B. „EG links"), Hauszähler als „Allgemein". Alles synchronisiert auf alle Geräte.</p></div>
   ${o.einheiten.some(e=>e.besonderheiten)?`<div class="card"><h3>Besonderheiten</h3>${o.einheiten.filter(e=>e.besonderheiten).map(e=>`<p class="note" style="margin:5px 0"><b>${esc(e.bezeichnung)}:</b> ${esc(e.besonderheiten)}</p>`).join('')}</div>`:''}
   ${(o.notizen||[]).length?`<div class="card"><h3>Notizen zum Objekt</h3>${o.notizen.map(n=>`<p class="note" style="margin:5px 0">• ${esc(n)}</p>`).join('')}</div>`:''}`;
 }
