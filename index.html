@@ -471,7 +471,8 @@ function icsOffer(events, name){
   <p class="note" style="margin:0 0 12px">${events.length===1?esc(events[0].titel)+' · '+D(events[0].datum):events.length+' Termine'}</p>
   <div class="btnrow"><button class="btn primary" id="icsOfDl">📥 .ics-Datei – Apple Kalender / Outlook</button></div>
   <div style="margin-top:8px">${events.map(ev=>`<p style="margin:6px 0"><a class="btn" target="_blank" rel="noopener" href="${esc(icsGoogleLink(ev))}">🌐 Google Kalender: ${esc((ev.titel||'').slice(0,44))}${(ev.titel||'').length>44?'…':''}</a></p>`).join('')}</div>
-  <p class="note" style="margin-top:10px">.ics: am Mac Doppelklick → Apple Kalender („Kalender"-App). Am iPhone öffnet sich das Teilen-Menü → „Kalender" wählen. Google-Link: öffnet den Termin direkt im Browser, nur speichern drücken.</p>
+  <p style="margin:10px 0;padding:8px 12px;background:var(--bg,#f4f6f8);border-radius:8px">⚠️ <b>Der Termin liegt am ${D(events[0].datum)}${events.length>1?' (u. a.)':''}</b> – nach dem Import im Kalender zu diesem Datum springen oder nach „Mieterhöhung" suchen. In der aktuellen Woche ist er nicht zu sehen.</p>
+  <p class="note" style="margin-top:6px">.ics: am Mac Doppelklick → Apple Kalender bestätigt den Import teils ohne Meldung. Am iPhone Teilen-Menü → „Kalender". Google-Link: öffnet den Termin im Browser, nur speichern drücken.</p>
   <div class="btnrow" style="justify-content:flex-end"><button class="btn" id="icsOfClose">Schließen</button></div>`;
   dlg.querySelector('#icsOfDl').addEventListener('click',()=>icsDeliver(icsBuild(events), name||events[0].titel));
   dlg.querySelector('#icsOfClose').addEventListener('click',()=>dlg.close());
