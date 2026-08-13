@@ -281,10 +281,18 @@ function mietCheck(o, e){
 /* ========== Druckfertiger Brief (DIN 5008 Form B, Fensterumschlag) ==========
    Absenderzeile + Anschriftfeld sitzen so, dass sie im Fensterkuvert (DIN lang) sichtbar
    sind. Falzmarken bei 105/210 mm. Alles im Dokument direkt editierbar. */
-function briefPdfHtml(o,e,txt,docTitel){
+function briefPdfHtml(o,e,txt,docTitel,kind){
   const parts=txt.split('\n\n');
   const betreff=parts[2]||docTitel||'';
   let body=parts.slice(3).join('\n\n').replace(/\n?\[Hinweis für dich:[\s\S]*?\]\s*$/,'').trim();
+  // Zustimmungs-/Unterschriftszeile aus dem Fließtext lösen – wird als eigener Block unter den Brief gesetzt
+  const hatZust = kind==='erh' && /Zustimmung des Mieters|Einverstanden \(Datum/.test(body);
+  body=body.replace(/\n?_{6,}\n(Zustimmung des Mieters|Einverstanden \(Datum)[\s\S]*$/,'').trim();
+  const zustBlock = hatZust?`
+<div class="zust" contenteditable="true"><b>Zustimmungserklärung des Mieters / der Mieter (§ 558b Abs. 1 BGB)</b><br>
+Hiermit stimme ich / stimmen wir der oben genannten Erhöhung der monatlichen Nettokaltmiete zu.<br><br>
+______________________________&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;______________________________<br>
+<span style="font-size:9pt;color:#444">Ort, Datum</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="font-size:9pt;color:#444">Unterschrift Mieter/in</span></div>`:'';
   const absFull=(typeof nkAbsender==='function'?nkAbsender(o):absenderFor(o));
   const absLines=absFull.split('\n').map(s=>s.trim()).filter(Boolean);
   const empf=(typeof nkAnschrift==='function'?nkAnschrift(o,e):`${e.mieter||'Mieter/in'}\n${e.bezeichnung}\n${o.adresse||o.name}`);
@@ -294,8 +302,8 @@ function briefPdfHtml(o,e,txt,docTitel){
 <style>
 @page{size:A4;margin:0}
 html,body{margin:0;padding:0}
-body{font-family:Helvetica,Arial,sans-serif;font-size:11pt;line-height:1.5;color:#111}
-.sheet{position:relative;width:210mm;min-height:296mm;box-sizing:border-box;padding:98mm 20mm 20mm 25mm;margin:0 auto;background:#fff}
+body{font-family:Helvetica,Arial,sans-serif;font-size:10.5pt;line-height:1.42;color:#111}
+.sheet{position:relative;width:210mm;min-height:296mm;box-sizing:border-box;padding:95mm 20mm 12mm 25mm;margin:0 auto;background:#fff}
 .falz{position:absolute;left:4mm;width:5mm;border-top:.5pt solid #888}
 .f1{top:105mm}.f2{top:210mm}.fm{top:148.5mm;width:8mm}
 .rueck{position:absolute;top:45mm;left:25mm;width:85mm;font-size:7.5pt;color:#333;border-bottom:.5pt solid #333;padding-bottom:1mm;white-space:nowrap;overflow:hidden}
@@ -304,6 +312,7 @@ body{font-family:Helvetica,Arial,sans-serif;font-size:11pt;line-height:1.5;color
 .datum{position:absolute;top:78mm;right:20mm;text-align:right;font-size:10.5pt}
 .betreff{font-weight:bold;margin:0 0 8mm}
 .body{white-space:pre-wrap}
+.zust{margin-top:8mm;padding:4mm 5mm;border:1pt solid #111;page-break-inside:avoid;line-height:1.4}
 [contenteditable]:hover{outline:1.5px dashed #2a78d6;outline-offset:3px}
 .toolbar{position:fixed;top:0;left:0;right:0;display:flex;align-items:center;gap:16px;background:#fff8dc;border-bottom:1px solid #d9c869;padding:10px 14px;font-size:10pt;z-index:10}
 @media print{.toolbar{display:none!important}[contenteditable]:hover{outline:none}}
@@ -319,6 +328,7 @@ body{font-family:Helvetica,Arial,sans-serif;font-size:11pt;line-height:1.5;color
 <div class="datum" contenteditable="true">${esc(ort)}, den ${heute}</div>
 <p class="betreff" contenteditable="true">${esc(betreff)}</p>
 <div class="body" contenteditable="true">${esc(body)}</div>
+${zustBlock}
 </div>
 <script>
 var _e=document.getElementById('empf');
@@ -333,7 +343,7 @@ function briefPdf(o,e,kind){
   const titel = (kind==='erh'?'Mieterhöhung ':'Zahlungserinnerung ')+(e.mieter||e.bezeichnung);
   const w=window.open('','_blank');
   if(!w){ alert('Popup blockiert – bitte Popups für diese Seite erlauben.'); return; }
-  w.document.write(briefPdfHtml(o,e,txt,titel));
+  w.document.write(briefPdfHtml(o,e,txt,titel,kind));
   w.document.close(); try{w.focus();}catch(err){}
 }
 
@@ -808,6 +818,13 @@ function viewDash(){
     (o.notizen||[]).forEach(n=>{ if(/ACHTUNG|WICHTIG|Räumung|umstellen/i.test(n)) alerts.push({o,n,bad:/ACHTUNG|Räumung/i.test(n)}); });
     o.einheiten.forEach(e=>{ if(/ACHTUNG|Räumung|keine Mietzahlungen/i.test(e.besonderheiten||'')) alerts.push({o,n:e.bezeichnung+': '+e.besonderheiten,bad:true}); });
   });
+  // Sofort mögliche Mieterhöhungen → Handlungsbedarf
+  units.forEach(({o,e})=>{
+    const c=mietCheck(o,e);
+    if(!e.gewerbe && e.mietart!=='index' && c.potenzial>0 && c.naechsteErhoehung && c.naechsteErhoehung<=today()){
+      alerts.push({o,n:`${e.bezeichnung} (${e.mieter||'leer'}): Mieterhöhung AB SOFORT möglich – +${EUR(c.potenzial)}/Monat auf ${EUR(c.ziel)} kalt. ${c.hinweis[0]||''} Brief zeitnah versenden (§558b: wirksam ab 3. Monat nach Zugang).`,bad:false});
+    }
+  });
   const offA=store.get('ic_alerts_off')||[];
   const aKey=a=>a.o.name+'|'+a.n;
   const visAlerts=alerts.filter(a=>!offA.includes(aKey(a)));
@@ -818,7 +835,11 @@ function viewDash(){
   // Nächste Mietsteigerungen (Top 3 nach Potenzial)
   const steig=units.map(({o,e})=>({o,e,c:mietCheck(o,e)}))
     .filter(x=>x.c.potenzial>30)
-    .sort((a,b)=>b.c.potenzial-a.c.potenzial).slice(0,6);
+    .sort((a,b)=>{
+      const as=(a.c.naechsteErhoehung&&a.c.naechsteErhoehung<=today())?0:1;
+      const bs=(b.c.naechsteErhoehung&&b.c.naechsteErhoehung<=today())?0:1;
+      return as-bs || b.c.potenzial-a.c.potenzial;
+    }).slice(0,6);
   // Nächstes Verkaufspotential (§23-Frist am nächsten, mit Wert)
   const vk=DATA.objekte.map(o=>{
     const fr=(typeof fristFrei==='function')?fristFrei(o):null;
@@ -843,7 +864,7 @@ function viewDash(){
   <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(300px,1fr))">
   <div class="card" style="margin-bottom:0"><h3>↗ Nächste Mietsteigerungen</h3>
     ${steig.length?steig.map(x=>`<div class="row" style="display:flex;justify-content:space-between;gap:10px;padding:5px 0;font-size:13.5px;border-bottom:1px solid var(--border)">
-      <span style="min-width:0"><b>${esc(x.e.bezeichnung)}</b><br><span class="mut">${esc(x.o.adresse||x.o.name)}</span><br><span class="mut">${x.c.naechsteErhoehung?(x.c.naechsteErhoehung<=today()?'ab sofort möglich':'ab '+x.c.naechsteErhoehung.toLocaleDateString('de-DE')):''}</span></span>
+      <span style="min-width:0"><b>${esc(x.e.bezeichnung)}</b><br><span class="mut">${esc(x.o.adresse||x.o.name)}</span><br>${x.c.naechsteErhoehung?(x.c.naechsteErhoehung<=today()?'<span class="badge b-good">ab sofort möglich</span>':'<span class="mut">ab '+x.c.naechsteErhoehung.toLocaleDateString('de-DE')+'</span>'):''}</span>
       <b style="color:var(--good);white-space:nowrap">+${EUR(x.c.potenzial)}/M.</b></div>`).join(''):'<p class="note">Aktuell kein nennenswertes Potenzial.</p>'}
     <p class="note" style="margin-top:8px"><span class="backlink" data-open-view="miet" style="margin:0">→ Mietspiegel-Check</span></p></div>
   <div class="card" style="margin-bottom:0"><h3>🏷 Nächstes Verkaufspotential</h3>
