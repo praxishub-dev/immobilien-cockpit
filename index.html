@@ -278,6 +278,65 @@ function mietCheck(o, e){
   return r;
 }
 
+/* ========== Druckfertiger Brief (DIN 5008 Form B, Fensterumschlag) ==========
+   Absenderzeile + Anschriftfeld sitzen so, dass sie im Fensterkuvert (DIN lang) sichtbar
+   sind. Falzmarken bei 105/210 mm. Alles im Dokument direkt editierbar. */
+function briefPdfHtml(o,e,txt,docTitel){
+  const parts=txt.split('\n\n');
+  const betreff=parts[2]||docTitel||'';
+  let body=parts.slice(3).join('\n\n').replace(/\n?\[Hinweis für dich:[\s\S]*?\]\s*$/,'').trim();
+  const absFull=(typeof nkAbsender==='function'?nkAbsender(o):absenderFor(o));
+  const absLines=absFull.split('\n').map(s=>s.trim()).filter(Boolean);
+  const empf=(typeof nkAnschrift==='function'?nkAnschrift(o,e):`${e.mieter||'Mieter/in'}\n${e.bezeichnung}\n${o.adresse||o.name}`);
+  const heute=new Date().toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit',year:'numeric'});
+  const ort=(absLines.find(l=>/\d{5}/.test(l))||'').replace(/^\d{5}\s*/,'').trim()||'Bückeburg';
+  return `<!DOCTYPE html><html lang="de"><head><meta charset="UTF-8"><title>${esc(docTitel||betreff)}</title>
+<style>
+@page{size:A4;margin:0}
+html,body{margin:0;padding:0}
+body{font-family:Helvetica,Arial,sans-serif;font-size:11pt;line-height:1.5;color:#111}
+.sheet{position:relative;width:210mm;min-height:296mm;box-sizing:border-box;padding:98mm 20mm 20mm 25mm;margin:0 auto;background:#fff}
+.falz{position:absolute;left:4mm;width:5mm;border-top:.5pt solid #888}
+.f1{top:105mm}.f2{top:210mm}.fm{top:148.5mm;width:8mm}
+.rueck{position:absolute;top:45mm;left:25mm;width:85mm;font-size:7.5pt;color:#333;border-bottom:.5pt solid #333;padding-bottom:1mm;white-space:nowrap;overflow:hidden}
+.empf{position:absolute;top:51mm;left:25mm;width:85mm;min-height:30mm;white-space:pre-line}
+.kopf{position:absolute;top:20mm;right:20mm;text-align:right;font-size:9pt;color:#444;white-space:pre-line}
+.datum{position:absolute;top:78mm;right:20mm;text-align:right;font-size:10.5pt}
+.betreff{font-weight:bold;margin:0 0 8mm}
+.body{white-space:pre-wrap}
+[contenteditable]:hover{outline:1.5px dashed #2a78d6;outline-offset:3px}
+.toolbar{position:fixed;top:0;left:0;right:0;display:flex;align-items:center;gap:16px;background:#fff8dc;border-bottom:1px solid #d9c869;padding:10px 14px;font-size:10pt;z-index:10}
+@media print{.toolbar{display:none!important}[contenteditable]:hover{outline:none}}
+@media screen{body{background:#e8e8e8}.sheet{box-shadow:0 2px 12px rgba(0,0,0,.25);margin:52px auto 24px}}
+</style></head><body>
+<div class="toolbar"><div style="flex:1;min-width:0">✏️ <b>Alle Texte sind anklickbar und direkt änderbar.</b> Anschrift-Änderungen werden für diesen Mieter gespeichert. Absender/Empfänger sitzen passend fürs Fensterkuvert (DIN lang).</div>
+<button onclick="window.print()" style="flex-shrink:0;padding:8px 18px;font-size:10pt;cursor:pointer;background:#2a78d6;color:#fff;border:0;border-radius:6px;white-space:nowrap">🖨 Drucken / Als PDF sichern</button></div>
+<div class="sheet">
+<div class="falz f1"></div><div class="falz fm"></div><div class="falz f2"></div>
+<div class="kopf" contenteditable="true">${absLines.map(esc).join('\n')}</div>
+<div class="rueck" contenteditable="true">${absLines.map(esc).join(' · ')}</div>
+<div class="empf" contenteditable="true" id="empf">${esc(empf)}</div>
+<div class="datum" contenteditable="true">${esc(ort)}, den ${heute}</div>
+<p class="betreff" contenteditable="true">${esc(betreff)}</p>
+<div class="body" contenteditable="true">${esc(body)}</div>
+</div>
+<script>
+var _e=document.getElementById('empf');
+if(_e) _e.addEventListener('input',function(){
+  try{ if(window.opener&&window.opener.nkSaveAnschrift) window.opener.nkSaveAnschrift(${JSON.stringify(o.id)},${JSON.stringify(e.id)},_e.innerText); }catch(err){}
+});
+</scr`+`ipt>
+</body></html>`;
+}
+function briefPdf(o,e,kind){
+  const txt = kind==='erh'?briefErhoehung(o,e):briefMahnung(o,e);
+  const titel = (kind==='erh'?'Mieterhöhung ':'Zahlungserinnerung ')+(e.mieter||e.bezeichnung);
+  const w=window.open('','_blank');
+  if(!w){ alert('Popup blockiert – bitte Popups für diese Seite erlauben.'); return; }
+  w.document.write(briefPdfHtml(o,e,txt,titel));
+  w.document.close(); try{w.focus();}catch(err){}
+}
+
 /* ========== Mieterhöhungs-Erinnerung mit rechtssicherem Vorlauf (§558b BGB) ==========
    Fristenkette: Zugang des Verlangens im Monat M → Zustimmungsfrist bis Ende Monat M+2
    → erhöhte Miete geschuldet ab 1. des Monats M+3. Für Wirksamkeit ab Monat W muss der
@@ -651,8 +710,7 @@ function render(){
     ev.stopPropagation();
     const b=JSON.parse(el.dataset.brief);
     const u=unitById(b.id); if(!u) return;
-    if(b.kind==='erh') textDialog('Mieterhöhung: '+u.e.bezeichnung, briefErhoehung(u.o,u.e));
-    else textDialog('Zahlungserinnerung: '+u.e.bezeichnung, briefMahnung(u.o,u.e));
+    briefPdf(u.o,u.e,b.kind==='erh'?'erh':'mahn');
   }));
   m.querySelectorAll('[data-open-view]').forEach(el=>el.addEventListener('click',()=>{VIEW=el.dataset.openView;DETAIL=null;render();window.scrollTo(0,0);}));
   m.querySelectorAll('[data-alertoff]').forEach(el=>el.addEventListener('click',ev=>{
