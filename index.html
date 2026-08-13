@@ -196,6 +196,23 @@ const store = {
   del(k){ try{ localStorage.removeItem(k); }catch(e){ delete mem[k]; } }
 };
 let DATA = store.get('ic_data');
+/* Datenkorrektur 08/2026: ETW Bad Eilsen (Steding) & ETW Lingen waren fälschlich als
+   Indexmiete erfasst. Bad Eilsen am Vertrag geprüft (Avery-Zweckform-Formular):
+   weder Staffel- noch Index-Klausel angekreuzt → §558 gilt. Lingen lt. Christian ebenfalls Standard. */
+function migrateData(){
+  if(!DATA) return false; let ch=false;
+  (DATA.objekte||[]).forEach(o=>(o.einheiten||[]).forEach(e=>{
+    if((e.id==='fl-og-l'||e.id==='li-eg') && e.mietart==='index'){
+      e.mietart='standard';
+      e.besonderheiten=('Standardmietvertrag (§558; Vertragsprüfung 08/2026: keine Index-/Staffelklausel). '
+        +String(e.besonderheiten||'').replace(/Indexmiete;?\s*/i,'')).trim();
+      ch=true;
+    }
+  }));
+  if(ch) store.set('ic_data',DATA);
+  return ch;
+}
+migrateData();
 let SETTINGS = store.get('ic_settings') || {apiKey:'', model:'claude-sonnet-4-5'};
 let ASSIGN = store.get('ic_assign') || {};      // iban/name-hash -> einheitId (manuelle Zuordnungen)
 let PAYMENTS = store.get('ic_payments') || [];   // importierte Umsätze
@@ -244,15 +261,56 @@ function mietCheck(o, e){
     const maxKappung = basisMiete*(1+kapp);
     const ziel = Math.min(ms.wert*e.flaeche, maxKappung);
     r.potenzial = Math.max(0, Math.round(ziel - e.kaltmiete));
+    r.ziel = Math.round(ziel);
     if(r.potenzial>0){
-      r.hinweis.push(`Bis Vergleichsmiete (${QM(ms.wert)}) und Kappungsgrenze (${ms.kappung} %/3 J.) sind ca. +${EUR(r.potenzial)}/Monat möglich.`);
+      const kappGreift = ziel===maxKappung && ms.wert*e.flaeche>maxKappung;
+      r.hinweis.push(`Erhöhung möglich: +${EUR(r.potenzial)}/Monat auf ${EUR(r.ziel)} kalt – begrenzt durch ${kappGreift?`die Kappungsgrenze ${ms.kappung} % in 3 Jahren (§558 Abs. 3 BGB)`:`die ortsübliche Vergleichsmiete (${QM(ms.wert)})`}.`);
+      if(kappGreift) r.hinweis.push(`Volle Vergleichsmiete (${EUR(Math.round(ms.wert*e.flaeche))} kalt) erst in mehreren Schritten erreichbar.`);
+    } else {
+      r.hinweis.push(r.qm>=ms.wert
+        ? 'Keine Erhöhung nach §558 möglich – Miete liegt bereits auf/über der ortsüblichen Vergleichsmiete.'
+        : `Kappungsgrenze (${ms.kappung} %/3 J.) aktuell ausgeschöpft – zum nächsten Termin neu prüfen.`);
     }
-    if(ziel===maxKappung && ms.wert*e.flaeche>maxKappung) r.hinweis.push('Kappungsgrenze limitiert – volle Vergleichsmiete erst in mehreren Schritten erreichbar.');
   }
   if(e.besonderheiten && /verzicht/i.test(e.besonderheiten)) r.hinweis.push('Achtung: vertraglicher Erhöhungsverzicht – siehe Besonderheiten.');
   const fr = r.naechsteErhoehung;
   r.text = `${r.status}. ${fr ? (fr<=today() ? 'Erhöhung ab sofort möglich.' : 'Nächste Erhöhung wirksam ab '+fr.toLocaleDateString('de-DE')+'.') : ''}`;
   return r;
+}
+
+/* ========== Mieterhöhungs-Erinnerung mit rechtssicherem Vorlauf (§558b BGB) ==========
+   Fristenkette: Zugang des Verlangens im Monat M → Zustimmungsfrist bis Ende Monat M+2
+   → erhöhte Miete geschuldet ab 1. des Monats M+3. Für Wirksamkeit ab Monat W muss der
+   Brief also spätestens im Monat W−3 zugehen; Versand 1 Woche vor Monatsende (Postlauf). */
+function erhFristen(wirk){
+  const wirk1 = new Date(wirk.getFullYear(), wirk.getMonth(), 1);
+  const zM = addMonths(wirk1,-3);
+  const zugangEnde = new Date(zM.getFullYear(), zM.getMonth()+1, 0);
+  const versand = new Date(zugangEnde); versand.setDate(versand.getDate()-7);
+  const zustimmung = new Date(wirk1.getFullYear(), wirk1.getMonth(), 0);
+  return {versand, zugangEnde, zustimmung, wirk:wirk1};
+}
+function erhReminder(o,e){
+  const c = mietCheck(o,e);
+  if(e.gewerbe||e.mietart==='gewerbe'||!c.naechsteErhoehung) return null;
+  if(e.mietart==='index'){
+    const d = c.naechsteErhoehung<today()?today():c.naechsteErhoehung;
+    return {titel:`Indexanpassung prüfen: ${e.bezeichnung} (${e.mieter||'–'})`, datum:isoDate(d),
+      notiz:`${o.adresse||o.name} – VPI-Entwicklung prüfen (§557b BGB). ${c.hinweis.join(' ')}`};
+  }
+  const w = c.naechsteErhoehung;
+  let wirk = new Date(w.getFullYear(), w.getMonth() + (w.getDate()>1?1:0), 1); // Wirksamkeit immer zum Monatsersten (§558b), ggf. aufrunden
+  const earliest = new Date(today().getFullYear(), today().getMonth()+3, 1);   // frühestes noch erreichbares Wirkdatum (Zugang diesen Monat)
+  if(wirk<earliest) wirk = earliest;
+  const F = erhFristen(wirk);
+  const sofort = F.versand<=today();
+  const remind = sofort?today():F.versand;
+  const DF = d=>d.toLocaleDateString('de-DE');
+  return {titel:`Mieterhöhung versenden: ${e.bezeichnung} (${e.mieter||'–'})`, datum:isoDate(remind),
+    notiz:`${o.adresse||o.name} – ${e.bezeichnung}, Mieter: ${e.mieter||'–'}. `
+      +(c.potenzial>0?`Möglich: +${EUR(c.potenzial)}/Monat auf ${EUR(c.ziel)} kalt. `:'')
+      +c.hinweis.join(' ')
+      +` Fristen (§558b BGB): Brief ${sofort?'SOFORT':'bis '+DF(F.versand)} per Post abschicken (≈1 Woche Postlauf-Puffer), Zugang beim Mieter spätestens ${DF(F.zugangEnde)}, Zustimmungsfrist bis ${DF(F.zustimmung)}, erhöhte Miete ab ${DF(F.wirk)}. Betrag vor Versand aktuell prüfen.`};
 }
 
 /* ========== Automatische Erinnerungsvorschläge ========== */
@@ -261,9 +319,9 @@ function autoReminders(){
   const t=today();
   allUnits().forEach(({o,e})=>{
     const c = mietCheck(o,e);
-    if(!e.gewerbe && c.potenzial>50 && c.naechsteErhoehung){
-      const d = c.naechsteErhoehung<t ? addMonths(t,0) : c.naechsteErhoehung;
-      list.push({titel:`Mieterhöhung prüfen: ${e.bezeichnung} (${e.mieter||'–'})`, datum:isoDate(addMonths(d,-2)), notiz:`${o.name} – Potenzial ca. +${c.potenzial} €/Monat. Wirksam frühestens ${d.toLocaleDateString('de-DE')}. Quelle Mietspiegel: ${mietspiegelOf(o.ort)?.quelle||''}`, kat:'Mieterhöhung'});
+    if(!e.gewerbe && e.mietart!=='index' && c.potenzial>50){
+      const er = erhReminder(o,e);
+      if(er) list.push({titel:er.titel, datum:er.datum, notiz:er.notiz+` Quelle Mietspiegel: ${mietspiegelOf(o.ort)?.quelle||''}`, kat:'Mieterhöhung'});
     }
     if(e.mietart==='index'){
       const basis = e.letzte_erhoehung? new Date(e.letzte_erhoehung.datum) : (e.mietbeginn?new Date(e.mietbeginn):null);
@@ -292,6 +350,23 @@ function makeICS(titel, datum, notiz){
     'UID:'+uid,'DTSTAMP:'+stamp,'DTSTART;VALUE=DATE:'+dt,'SUMMARY:'+escT(titel),'DESCRIPTION:'+escT(notiz),
     'BEGIN:VALARM','TRIGGER:-P1D','ACTION:DISPLAY','DESCRIPTION:'+escT(titel),'END:VALARM',
     'END:VEVENT','END:VCALENDAR'].join('\r\n');
+}
+function makeICSMulti(events){
+  const escT = s => String(s||'').replace(/\\/g,'\\\\').replace(/;/g,'\\;').replace(/,/g,'\\,').replace(/\n/g,'\\n');
+  const stamp = new Date().toISOString().replace(/[-:]/g,'').slice(0,15)+'Z';
+  const ve = events.map(ev=>{
+    const dt = ev.datum.replace(/-/g,'');
+    const uid = 'ic-'+Math.abs([...ev.titel+ev.datum].reduce((a,c)=>a*31+c.charCodeAt(0)|0,7))+'@immobilien-cockpit';
+    return ['BEGIN:VEVENT','UID:'+uid,'DTSTAMP:'+stamp,'DTSTART;VALUE=DATE:'+dt,'SUMMARY:'+escT(ev.titel),'DESCRIPTION:'+escT(ev.notiz),
+      'BEGIN:VALARM','TRIGGER:-P1D','ACTION:DISPLAY','DESCRIPTION:'+escT(ev.titel),'END:VALARM','END:VEVENT'].join('\r\n');
+  }).join('\r\n');
+  return ['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Immobilien-Cockpit//DE','CALSCALE:GREGORIAN',ve,'END:VCALENDAR'].join('\r\n');
+}
+function downloadICSMulti(events, name){
+  const blob = new Blob([makeICSMulti(events)],{type:'text/calendar'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+  a.download=String(name||'Erinnerungen').replace(/[^\wäöüß -]/gi,'').slice(0,60)+'.ics'; a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),5000);
 }
 function downloadICS(titel, datum, notiz){
   const blob = new Blob([makeICS(titel,datum,notiz)],{type:'text/calendar'});
@@ -538,6 +613,13 @@ function render(){
   m.querySelectorAll('[data-back]').forEach(el=>el.addEventListener('click',()=>{DETAIL=null;render();}));
   m.querySelectorAll('[data-ics]').forEach(el=>el.addEventListener('click',ev=>{ev.stopPropagation();icsDialog(JSON.parse(el.dataset.ics));}));
   m.querySelectorAll('[data-icsdirect]').forEach(el=>el.addEventListener('click',ev=>{ev.stopPropagation();const p=JSON.parse(el.dataset.icsdirect);downloadICS(p.titel,p.datum,p.notiz);}));
+  m.querySelectorAll('[data-icsall]').forEach(el=>el.addEventListener('click',ev=>{
+    ev.stopPropagation();
+    const o=DATA.objekte.find(x=>x.id===el.dataset.icsall); if(!o) return;
+    const evs=o.einheiten.map(e=>erhReminder(o,e)).filter(Boolean);
+    if(!evs.length){ el.textContent='Keine Erhöhungs-Termine'; setTimeout(()=>el.textContent='📅 Mieterhöhungen (ICS)',2000); return; }
+    downloadICSMulti(evs,'Mieterhoehungen '+(o.name||''));
+  }));
   m.querySelectorAll('[data-pay]').forEach(el=>el.addEventListener('click',ev=>{ev.stopPropagation();openPayDialog(el.dataset.pay);}));
   m.querySelectorAll('[data-objedit]').forEach(el=>el.addEventListener('click',ev=>{ev.stopPropagation();openObjEdit(el.dataset.objedit);}));
   m.querySelectorAll('[data-copy]').forEach(el=>el.addEventListener('click',ev=>{ev.stopPropagation();copyTxt(el.dataset.copy,el);}));
@@ -795,6 +877,7 @@ function viewObjektDetail(id){
   const f=o.finanzierung||{};
   const rows=o.einheiten.map(e=>{
     const c=mietCheck(o,e);
+    const erh=erhReminder(o,e);
     const remind={titel:`${e.bezeichnung} – ${o.name}`,datum:isoDate(today()),notiz:`Mieter: ${e.mieter||'–'}`};
     return `<tr><td><b>${esc(e.bezeichnung)}</b><br><span class="mut">${esc(e.mieter||'leer')}</span></td>
     <td class="num">${e.flaeche??'–'} m²</td>
@@ -810,7 +893,7 @@ function viewObjektDetail(id){
       ${e.telefon?`<a class="btn small" href="tel:${esc(String(e.telefon).replace(/[^+\d]/g,''))}" title="Anrufen">📞</a><button class="btn small" data-copy="${esc(e.telefon)}" title="Kopieren">📋</button>`:''}</div>
       <div style="display:flex;gap:4px;align-items:center"><input type="email" placeholder="E-Mail" data-kont="${e.id}:email" value="${esc(e.email||'')}" style="font-size:12px;padding:3px 6px">
       ${e.email?`<a class="btn small" href="mailto:${esc(e.email)}" title="Mail schreiben">✉</a><button class="btn small" data-copy="${esc(e.email)}" title="Kopieren">📋</button>`:''}</div>`:'<span class="mut">–</span>'}</td>
-    <td style="white-space:nowrap"><button class="btn small" data-ics='${JSON.stringify(remind).replace(/'/g,"&#39;")}'>⏰</button>
+    <td style="white-space:nowrap">${erh?`<button class="btn small" title="Mieterhöhungs-Erinnerung als Kalenderdatei – terminiert so, dass der Brief rechtzeitig per Post zugeht (§558b)" data-icsdirect='${JSON.stringify(erh).replace(/'/g,"&#39;")}'>📅 Erhöhung</button><br>`:''}<button class="btn small" data-ics='${JSON.stringify(remind).replace(/'/g,"&#39;")}'>⏰</button>
     <button class="btn small" title="Mieterhöhungs-Schreiben erstellen" data-brief='{"kind":"erh","id":"${e.id}"}'>✉ Erhöhung</button></td></tr>`;
   }).join('');
   return `<span class="backlink" data-back>← alle Objekte</span>
@@ -819,6 +902,7 @@ function viewObjektDetail(id){
     <a class="btn" href="${svUrl(o)}" target="_blank" rel="noopener">📍 Street View öffnen</a>
     <a class="btn" href="${mapUrl(o)}" target="_blank" rel="noopener">Google Maps</a>
     <button class="btn" data-ics='${JSON.stringify({titel:o.name,datum:isoDate(today()),notiz:o.adresse}).replace(/'/g,"&#39;")}'>⏰ Erinnerung</button>
+    <button class="btn" data-icsall="${o.id}" title="Alle Mieterhöhungs-Termine dieses Objekts als eine Kalenderdatei (rechtzeitig zum Postversand, §558b)">📅 Mieterhöhungen (ICS)</button>
     <button class="btn" data-objedit="${o.id}">✎ Daten bearbeiten</button>
   </div>
   <div class="grid kpis">
@@ -851,7 +935,7 @@ function viewMiet(){
     const c=mietCheck(o,e);
     const ms=mietspiegelOf(o.ort);
     const frei=c.naechsteErhoehung;
-    const remind = frei?{titel:`Mieterhöhung prüfen: ${e.bezeichnung} (${e.mieter||'–'})`,datum:isoDate(frei<today()?today():addMonths(frei,-2)),notiz:`${o.name} – ${c.potenzial>0?`Potenzial +${c.potenzial} €/Monat.`:'Kappungsgrenze aktuell ausgeschöpft – Potenzial zum Termin neu prüfen.'} ${c.hinweis.join(' ')}`}:null;
+    const remind = erhReminder(o,e);
     return `<tr><td><b>${esc(e.bezeichnung)}</b><br><span class="mut">${esc(o.name)} · ${esc(e.mieter||'leer')}</span></td>
     <td class="num">${c.qm?QM(c.qm):'–'}</td>
     <td class="num">${ms?QM(ms.wert):'–'}<br><span class="mut">${ms?ms.spanne[0].toLocaleString('de-DE')+'–'+ms.spanne[1].toLocaleString('de-DE'):''}</span></td>
@@ -2160,6 +2244,7 @@ async function syncPull(manual){
         if(typeof NKDATA!=='undefined') NKDATA=store.get('ic_nk')||{};
         if(typeof RS_!=='undefined'&&state.data.ic_rechner) RS_=state.data.ic_rechner;
         SYNC_APPLYING=false;
+        if(typeof migrateData==='function') migrateData(); // Datenkorrekturen auch auf gepullte Stände anwenden (löst ggf. Push aus)
         lastSyncTs=state.ts; store.set('ic_sync_ts',lastSyncTs);
         syncSetStatus('synchron ('+new Date().toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'})+')');
         render();
