@@ -455,6 +455,28 @@ async function icsDeliver(content, name){
 }
 function downloadICSMulti(events, name){ icsDeliver(makeICSMulti(events), name||'Erinnerungen'); }
 function downloadICS(titel, datum, notiz){ icsDeliver(makeICS(titel,datum,notiz), titel); }
+/* Auswahl-Dialog: .ics (Apple/Outlook) oder direkt Google Kalender (Link, keine Datei nötig) */
+function icsGoogleLink(ev){
+  const d1=String(ev.datum||'').replace(/-/g,'');
+  const d2=isoDate(new Date(new Date(ev.datum).getTime()+864e5)).replace(/-/g,'');
+  return 'https://calendar.google.com/calendar/render?action=TEMPLATE&text='+encodeURIComponent(ev.titel||'Erinnerung')
+    +'&dates='+d1+'/'+d2+'&details='+encodeURIComponent(ev.notiz||'');
+}
+function icsOffer(events, name){
+  events=(events||[]).filter(e=>e&&e.datum);
+  if(!events.length) return;
+  let dlg=document.getElementById('icsOfferDlg');
+  if(!dlg){ dlg=document.createElement('dialog'); dlg.id='icsOfferDlg'; dlg.style.width='min(520px,94vw)'; document.body.appendChild(dlg); }
+  dlg.innerHTML=`<h3 style="margin:0 0 6px">In Kalender übernehmen</h3>
+  <p class="note" style="margin:0 0 12px">${events.length===1?esc(events[0].titel)+' · '+D(events[0].datum):events.length+' Termine'}</p>
+  <div class="btnrow"><button class="btn primary" id="icsOfDl">📥 .ics-Datei – Apple Kalender / Outlook</button></div>
+  <div style="margin-top:8px">${events.map(ev=>`<p style="margin:6px 0"><a class="btn" target="_blank" rel="noopener" href="${esc(icsGoogleLink(ev))}">🌐 Google Kalender: ${esc((ev.titel||'').slice(0,44))}${(ev.titel||'').length>44?'…':''}</a></p>`).join('')}</div>
+  <p class="note" style="margin-top:10px">.ics: am Mac Doppelklick → Apple Kalender („Kalender"-App). Am iPhone öffnet sich das Teilen-Menü → „Kalender" wählen. Google-Link: öffnet den Termin direkt im Browser, nur speichern drücken.</p>
+  <div class="btnrow" style="justify-content:flex-end"><button class="btn" id="icsOfClose">Schließen</button></div>`;
+  dlg.querySelector('#icsOfDl').addEventListener('click',()=>icsDeliver(icsBuild(events), name||events[0].titel));
+  dlg.querySelector('#icsOfClose').addEventListener('click',()=>dlg.close());
+  dlg.showModal();
+}
 function icsDialog(pre){
   const dlg=document.getElementById('icsDlg');
   document.getElementById('icsT').value=pre?.titel||'';
@@ -693,13 +715,13 @@ function render(){
   m.querySelectorAll('[data-open]').forEach(el=>el.addEventListener('click',ev=>{ev.stopPropagation();DETAIL=el.dataset.open;VIEW='objekte';document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('active',x.dataset.v==='objekte'));render();}));
   m.querySelectorAll('[data-back]').forEach(el=>el.addEventListener('click',()=>{DETAIL=null;render();}));
   m.querySelectorAll('[data-ics]').forEach(el=>el.addEventListener('click',ev=>{ev.stopPropagation();icsDialog(JSON.parse(el.dataset.ics));}));
-  m.querySelectorAll('[data-icsdirect]').forEach(el=>el.addEventListener('click',ev=>{ev.stopPropagation();const p=JSON.parse(el.dataset.icsdirect);downloadICS(p.titel,p.datum,p.notiz);}));
+  m.querySelectorAll('[data-icsdirect]').forEach(el=>el.addEventListener('click',ev=>{ev.stopPropagation();const p=JSON.parse(el.dataset.icsdirect);icsOffer([p],p.titel);}));
   m.querySelectorAll('[data-icsall]').forEach(el=>el.addEventListener('click',ev=>{
     ev.stopPropagation();
     const o=DATA.objekte.find(x=>x.id===el.dataset.icsall); if(!o) return;
     const evs=o.einheiten.map(e=>erhReminder(o,e)).filter(Boolean);
     if(!evs.length){ el.textContent='Keine Erhöhungs-Termine'; setTimeout(()=>el.textContent='📅 Mieterhöhungen (ICS)',2000); return; }
-    downloadICSMulti(evs,'Mieterhoehungen '+(o.name||''));
+    icsOffer(evs,'Mieterhoehungen '+(o.name||''));
   }));
   m.querySelectorAll('[data-pay]').forEach(el=>el.addEventListener('click',ev=>{ev.stopPropagation();openPayDialog(el.dataset.pay);}));
   m.querySelectorAll('[data-objedit]').forEach(el=>el.addEventListener('click',ev=>{ev.stopPropagation();openObjEdit(el.dataset.objedit);}));
@@ -2569,8 +2591,8 @@ document.addEventListener('DOMContentLoaded',()=>{
   document.getElementById('icsCancel').addEventListener('click',()=>dlg.close());
   document.getElementById('icsOk').addEventListener('click',()=>{
     const t=document.getElementById('icsT').value.trim()||'Erinnerung';
-    downloadICS(t,document.getElementById('icsD').value,document.getElementById('icsN').value);
     dlg.close();
+    icsOffer([{titel:t,datum:document.getElementById('icsD').value,notiz:document.getElementById('icsN').value}],t);
   });
   render();
   fetchMarktdaten();
