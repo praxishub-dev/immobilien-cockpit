@@ -400,39 +400,51 @@ function autoReminders(){
 }
 
 /* ========== ICS-Erstellung ========== */
-function makeICS(titel, datum, notiz){
-  const dt = datum.replace(/-/g,'');
-  const uid = 'ic-'+Math.abs([...titel+datum].reduce((a,c)=>a*31+c.charCodeAt(0)|0,7))+'@immobilien-cockpit';
+/* RFC 5545: Zeilen max. 75 Bytes, Fortsetzung mit CRLF + Leerzeichen (line folding).
+   Ohne Folding lehnen manche Kalender (v.a. iOS/Outlook) die Datei ab. */
+function icsFold(line){
+  const enc = new TextEncoder();
+  if(enc.encode(line).length<=73) return line;
+  const out=[]; let cur='';
+  for(const ch of line){
+    if(enc.encode(cur+ch).length>73){ out.push(cur); cur=' '+ch; } else cur+=ch;
+  }
+  out.push(cur);
+  return out.join('\r\n');
+}
+function icsBuild(events){
   const escT = s => String(s||'').replace(/\\/g,'\\\\').replace(/;/g,'\\;').replace(/,/g,'\\,').replace(/\n/g,'\\n');
   const stamp = new Date().toISOString().replace(/[-:]/g,'').slice(0,15)+'Z';
-  return ['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Immobilien-Cockpit//DE','CALSCALE:GREGORIAN','BEGIN:VEVENT',
-    'UID:'+uid,'DTSTAMP:'+stamp,'DTSTART;VALUE=DATE:'+dt,'SUMMARY:'+escT(titel),'DESCRIPTION:'+escT(notiz),
-    'BEGIN:VALARM','TRIGGER:-P1D','ACTION:DISPLAY','DESCRIPTION:'+escT(titel),'END:VALARM',
-    'END:VEVENT','END:VCALENDAR'].join('\r\n');
+  const L=['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Immobilien-Cockpit//DE','CALSCALE:GREGORIAN','METHOD:PUBLISH'];
+  events.forEach(ev=>{
+    const dt = String(ev.datum||'').replace(/-/g,'');
+    const uid = 'ic-'+Math.abs([...String(ev.titel)+String(ev.datum)].reduce((a,c)=>a*31+c.charCodeAt(0)|0,7))+'@immobilien-cockpit';
+    L.push('BEGIN:VEVENT','UID:'+uid,'DTSTAMP:'+stamp,'DTSTART;VALUE=DATE:'+dt,
+      'SUMMARY:'+escT(ev.titel),'DESCRIPTION:'+escT(ev.notiz),
+      'BEGIN:VALARM','TRIGGER:-P1D','ACTION:DISPLAY','DESCRIPTION:'+escT(ev.titel),'END:VALARM','END:VEVENT');
+  });
+  L.push('END:VCALENDAR');
+  return L.map(icsFold).join('\r\n')+'\r\n';
 }
-function makeICSMulti(events){
-  const escT = s => String(s||'').replace(/\\/g,'\\\\').replace(/;/g,'\\;').replace(/,/g,'\\,').replace(/\n/g,'\\n');
-  const stamp = new Date().toISOString().replace(/[-:]/g,'').slice(0,15)+'Z';
-  const ve = events.map(ev=>{
-    const dt = ev.datum.replace(/-/g,'');
-    const uid = 'ic-'+Math.abs([...ev.titel+ev.datum].reduce((a,c)=>a*31+c.charCodeAt(0)|0,7))+'@immobilien-cockpit';
-    return ['BEGIN:VEVENT','UID:'+uid,'DTSTAMP:'+stamp,'DTSTART;VALUE=DATE:'+dt,'SUMMARY:'+escT(ev.titel),'DESCRIPTION:'+escT(ev.notiz),
-      'BEGIN:VALARM','TRIGGER:-P1D','ACTION:DISPLAY','DESCRIPTION:'+escT(ev.titel),'END:VALARM','END:VEVENT'].join('\r\n');
-  }).join('\r\n');
-  return ['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Immobilien-Cockpit//DE','CALSCALE:GREGORIAN',ve,'END:VCALENDAR'].join('\r\n');
-}
-function downloadICSMulti(events, name){
-  const blob = new Blob([makeICSMulti(events)],{type:'text/calendar'});
-  const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
-  a.download=String(name||'Erinnerungen').replace(/[^\wäöüß -]/gi,'').slice(0,60)+'.ics'; a.click();
+function makeICS(titel, datum, notiz){ return icsBuild([{titel,datum,notiz}]); }
+function makeICSMulti(events){ return icsBuild(events); }
+/* Auslieferung: am iPhone/iPad/Android über das Teilen-Menü (dort „Kalender" wählen) –
+   Blob-Downloads funktionieren in der installierten PWA nicht zuverlässig. Sonst Download. */
+async function icsDeliver(content, name){
+  const fname = String(name||'Erinnerung').replace(/[^\wäöüßÄÖÜ -]/gi,'').trim().slice(0,60)+'.ics';
+  if(/iPhone|iPad|Android/i.test(navigator.userAgent) && navigator.canShare){
+    try{
+      const file = new File([content], fname, {type:'text/calendar'});
+      if(navigator.canShare({files:[file]})){ await navigator.share({files:[file]}); return; }
+    }catch(e){ if(e && e.name==='AbortError') return; /* sonst: Fallback Download */ }
+  }
+  const blob = new Blob([content],{type:'text/calendar;charset=utf-8'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=fname;
+  document.body.appendChild(a); a.click(); a.remove();
   setTimeout(()=>URL.revokeObjectURL(a.href),5000);
 }
-function downloadICS(titel, datum, notiz){
-  const blob = new Blob([makeICS(titel,datum,notiz)],{type:'text/calendar'});
-  const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
-  a.download=titel.replace(/[^\wäöüß -]/gi,'').slice(0,60)+'.ics'; a.click();
-  setTimeout(()=>URL.revokeObjectURL(a.href),5000);
-}
+function downloadICSMulti(events, name){ icsDeliver(makeICSMulti(events), name||'Erinnerungen'); }
+function downloadICS(titel, datum, notiz){ icsDeliver(makeICS(titel,datum,notiz), titel); }
 function icsDialog(pre){
   const dlg=document.getElementById('icsDlg');
   document.getElementById('icsT').value=pre?.titel||'';
