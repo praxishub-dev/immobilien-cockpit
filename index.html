@@ -420,7 +420,7 @@ function openPayDialog(unitId){
   ${unassigned.length?`<div style="max-height:180px;overflow:auto"><table><tbody>${unassigned.map(p=>`<tr><td class="mono">${D(p.datum)}</td><td>${esc(p.name||'')}<br><span class="mut">${esc((p.zweck||'').slice(0,50))}</span></td><td class="num">${EUR2(p.betrag)}</td><td><button class="btn small" data-payassign="${esc(p.key)}">→ zuordnen</button></td></tr>`).join('')}</tbody></table></div>`:'<p class="note">Keine – alle Eingänge sind zugeordnet.</p>'}`;
   const rewire=()=>{
     document.getElementById('payAdd').onclick=()=>{
-      const betrag=parseFloat(document.getElementById('payBetrag').value);
+      const betrag=deNum(document.getElementById('payBetrag').value);
       const monat=document.getElementById('payMonat').value;
       if(isNaN(betrag)||betrag===0){ alert('Bitte gültigen Betrag eingeben (positiv = bezahlt, negativ = Korrektur).'); return; }
       const p={datum:isoDate(today()), betrag, name:'Manuelle Buchung', zweck:document.getElementById('payNotiz').value||('Miete '+monatName(monat)), monat, manual:true};
@@ -461,7 +461,7 @@ function openObjEdit(id){
   <div class="frow">${F('Tilgung (€/Monat, für Fortschreibung)','oeTm',f.tilgung_monat)}${F('AfA (€/Jahr)','oeAfa',o.vermoegen?.afa_jahr)}</div>
   <p class="note" style="margin-top:8px">Leer lassen = unbekannt. Die Werte fließen automatisch in Objekte, Verkauf und Vermögensaufbau ein und werden im Browser gespeichert. Für ein Backup: Einstellungen → „Daten exportieren".</p>`;
   document.getElementById('objSave').onclick=()=>{
-    const num=id2=>{const v=parseFloat(String(document.getElementById(id2).value).replace(',','.'));return isNaN(v)?null:v;};
+    const num=id2=>{const v=deNum(document.getElementById(id2).value);return isNaN(v)?null:v;};
     const txt=id2=>document.getElementById(id2).value.trim()||null;
     o.kaufpreis=num('oeKp'); o.kaufdatum=txt('oeKd');
     o.finanzierung=o.finanzierung||{};
@@ -484,6 +484,14 @@ function textDialog(titel, text){
   document.getElementById('txtDlg').showModal();
 }
 
+/* ========== Deutscher Zahlen-Parser (Tausenderpunkt-sicher) ========== */
+function deNum(s){
+  s=String(s??'').trim();
+  if(!s) return NaN;
+  if(/^-?\d{1,3}(\.\d{3})+(,\d+)?$/.test(s)) s=s.replace(/\./g,'').replace(',','.');  // 50.255 / 1.850,40
+  else s=s.replace(',','.');
+  return parseFloat(s);
+}
 /* ========== Kopieren-Helfer ========== */
 function copyTxt(text,btn){
   const done=()=>{ if(btn){ const t=btn.textContent; btn.textContent='✓'; setTimeout(()=>btn.textContent=t,1200); } };
@@ -1344,7 +1352,7 @@ function wireVermoegen(){
     document.querySelectorAll('[data-afa]').forEach(inp=>{
       const o=DATA.objekte.find(x=>x.id===inp.dataset.afa); if(!o) return;
       o.vermoegen=o.vermoegen||{};
-      const v=parseFloat(inp.value);
+      const v=deNum(inp.value);
       o.vermoegen.afa_jahr=isNaN(v)||v<=0?null:v;
       if(!isNaN(v)&&v>0&&/SCHÄTZUNG/.test(o.vermoegen.afa_quelle||'')) o.vermoegen.afa_quelle='manuell eingetragen';
     });
@@ -1386,7 +1394,7 @@ function wireVerkauf(){
     document.querySelectorAll('[data-vmw]').forEach(inp=>{
       const o=DATA.objekte.find(x=>x.id===inp.dataset.vmw); if(!o) return;
       o.verkauf=o.verkauf||{};
-      const v=parseFloat(inp.value);
+      const v=deNum(inp.value);
       o.verkauf.marktwert_manuell=isNaN(v)||v<=0?null:v;
       o.verkauf.marktwert_datum=o.verkauf.marktwert_manuell?isoDate(today()):null;
     });
@@ -1605,7 +1613,7 @@ function wireNK(){
     const d=nkGet(o.id,NKJAHR);
     const save=()=>{ nkSave(); };
     document.querySelectorAll('[data-nkda]').forEach(el=>el.addEventListener('change',()=>{d.pos[el.dataset.nkda].da=el.checked;save();}));
-    document.querySelectorAll('[data-nkb]').forEach(el=>el.addEventListener('change',()=>{const v=parseFloat(el.value);const pp=d.pos[el.dataset.nkb];pp.betrag=isNaN(v)?null:v;pp.belege=[];if(!isNaN(v)&&v>0)pp.da=true;save();}));
+    document.querySelectorAll('[data-nkb]').forEach(el=>el.addEventListener('change',()=>{const v=deNum(el.value);const pp=d.pos[el.dataset.nkb];pp.betrag=isNaN(v)?null:v;pp.belege=[];if(!isNaN(v)&&v>0)pp.da=true;save();}));
     document.querySelectorAll('[data-nks]').forEach(el=>el.addEventListener('change',()=>{d.pos[el.dataset.nks].s=el.value;save();}));
     document.querySelectorAll('[data-nkum]').forEach(el=>el.addEventListener('change',()=>{d.pos[el.dataset.nkum].um=el.checked;save();}));
     document.querySelectorAll('[data-nkdel]').forEach(el=>el.addEventListener('click',ev=>{
@@ -1981,7 +1989,12 @@ function wireRechner(){
         <input type="range" min="${cfg.min}" max="${cfg.max}" step="${cfg.step}" value="${RS_[cfg.k]}" style="width:100%">`;
       const num=div.querySelector('input[type=number]'), rng=div.querySelector('input[type=range]');
       rng.addEventListener('input',()=>{ RS_[cfg.k]=parseFloat(rng.value); num.value=RS_[cfg.k]; rcUpdate(); });
-      num.addEventListener('change',()=>{ const v=parseFloat(String(num.value).replace(',','.')); if(!isNaN(v)){ RS_[cfg.k]=Math.min(cfg.max,Math.max(cfg.min,v)); } num.value=RS_[cfg.k]; rng.value=RS_[cfg.k]; rcUpdate(); });
+      num.addEventListener('change',()=>{
+        let s=String(num.value).trim(), v;
+        if(cfg.max>1000&&/^\d{1,3}(\.\d{3})+(,\d+)?$/.test(s)) v=parseFloat(s.replace(/\./g,'').replace(',','.'));
+        else v=parseFloat(s.replace(',','.'));
+        if(!isNaN(v)){ RS_[cfg.k]=Math.min(cfg.max,Math.max(cfg.min,v)); }
+        num.value=RS_[cfg.k]; rng.value=RS_[cfg.k]; rcUpdate(); });
       wrap.appendChild(div);
     });
   }
