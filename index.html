@@ -1879,6 +1879,7 @@ function viewRechner(){
     <button data-rctab="r" class="${tab==='r'?'active':''}">Rechnung</button>
     <button data-rctab="b" class="${tab==='b'?'active':''}">Bewertung</button>
     <button class="btn small" id="rcCsv" style="margin-left:auto">📊 CSV-Export</button>
+    <button class="btn small" id="rcPdf">⎙ PDF</button>
   </div>
   <div style="display:${tab==='e'?'grid':'none'};grid-template-columns:minmax(300px,420px) 1fr;gap:16px;align-items:start" id="rcPaneE">
     <div class="card"><h3>Parameter</h3><div id="rcSliders"></div>
@@ -1918,7 +1919,7 @@ function rcUpdate(){
     rcRow('Kaufpreis-Faktor',C.faktor.toFixed(1)+'×',{bold:true})+
     rcRow('Monatliche Rate','−'+rcD(C.annPM),{bold:true,color:'var(--bad)'})+
     box('Cashflow vor Steuern',(C.cfVorStPA>=0?'+':'−')+rcD(Math.abs(C.cfVorStPA/12))+'/Mon.',rcD(Math.abs(C.cfVorStPA))+' € p.a.',C.cfVorStPA>=0,C.cfVorStPA/12>=-200)+
-    box(C.steuerRuecklPM>0?'Steuerrücklage – monatlich zurücklegen':'Steuererstattung erwartet',(C.steuerRuecklPM>0?'−':'+')+rcD(Math.abs(C.steuerRuecklPM))+'/Mon.',rcD(Math.abs(C.steuerRuecklPM*12))+' € p.a.',C.steuerRuecklPM<=0,false)+
+    box(C.steuerRuecklPM>=0?'Steuererstattung erwartet':'Steuerlast – monatlich zurücklegen',(C.steuerRuecklPM>=0?'+':'−')+rcD(Math.abs(C.steuerRuecklPM))+'/Mon.',rcD(Math.abs(C.steuerRuecklPM*12))+' € p.a.',C.steuerRuecklPM>=0,true)+
     box('Cashflow nach Steuern',(C.cfPM>=0?'+':'−')+rcD(Math.abs(C.cfPM))+'/Mon.',rcD(Math.abs(C.cfPA))+' € p.a. · Tilgung '+rcD(C.tilgPA)+'/J.',C.cfPM>=0,C.cfPM>=-200)+
     `<div style="background:#faf6ec;border:1px solid #e2d5b0;border-radius:8px;padding:10px 12px;margin-top:8px">
     <div style="font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-2)">EK-Rendite p.a. (Cashflow + Tilgung)</div>
@@ -1998,6 +1999,71 @@ function wireRechner(){
       wrap.appendChild(div);
     });
   }
+  const pdfB=document.getElementById('rcPdf');
+  if(pdfB) pdfB.addEventListener('click',()=>{
+    const C=rcCalc();
+    const heute=new Date().toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit',year:'numeric'});
+    const F=n=>Math.round(n).toLocaleString('de-DE')+' €';
+    const row=(l,v,b)=>`<tr${b?' class="sum"':''}><td>${l}</td><td class="n">${v}</td></tr>`;
+    const ampel=(ok,warn)=>ok?'🟢':(warn?'🟡':'🔴');
+    const cfA=C.cfPM>=0, ekA=C.ekRend>=5, ekW=C.ekRend>=2, brA=C.brutto>=5, brW=C.brutto>=4;
+    const w=window.open('','_blank');
+    if(!w){ alert('Popup blockiert – bitte Popups für diese Seite erlauben.'); return; }
+    w.document.write(`<!DOCTYPE html><html lang="de"><head><meta charset="UTF-8"><title>Immobilien-Kalkulation ${heute}</title>
+<style>
+@page{size:A4;margin:18mm 18mm}
+body{font-family:Helvetica,Arial,sans-serif;font-size:10.5pt;color:#111;line-height:1.45;max-width:660px;margin:24px auto;padding:0 16px}
+h1{font-size:14pt;margin:0 0 2px}
+.sub{color:#555;font-size:9pt;margin:0 0 18px}
+h2{font-size:11pt;margin:18px 0 6px;border-bottom:1pt solid #111;padding-bottom:3px}
+table{width:100%;border-collapse:collapse;font-size:10pt}
+td{padding:4px 8px;border-bottom:.5pt solid #ddd}
+td.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;font-weight:600}
+tr.sum td{border-top:1.5pt solid #111;border-bottom:none;font-weight:bold}
+.kpi{display:inline-block;border:1pt solid #ccc;border-radius:6px;padding:8px 14px;margin:0 8px 8px 0}
+.kpi b{display:block;font-size:12pt}
+.kpi span{font-size:8pt;color:#555;text-transform:uppercase;letter-spacing:.4px}
+.note{font-size:8pt;color:#555;margin-top:20px}
+.toolbar{position:sticky;top:0;display:flex;align-items:center;gap:16px;background:#fff8dc;border:1px solid #d9c869;border-radius:8px;padding:10px 14px;margin-bottom:18px;font-size:10pt}
+@media print{.toolbar{display:none!important}body{margin:0;max-width:none;padding:0}}
+</style></head><body>
+<div class="toolbar"><div style="flex:1">Kalkulation prüfen, dann drucken oder als PDF sichern.</div>
+<button onclick="window.print()" style="flex-shrink:0;padding:8px 18px;cursor:pointer;background:#2a78d6;color:#fff;border:0;border-radius:6px">🖨 Drucken / Als PDF sichern</button></div>
+<h1>Immobilien-Kalkulation</h1>
+<p class="sub">Erstellt am ${heute} · Immobilien-Cockpit Specht &amp; Waschkowski · Planungsrechnung, keine Anlageberatung</p>
+<div>
+<span class="kpi"><span>Cashflow n. Steuern</span><b style="color:${cfA?'#008300':'#c43837'}">${C.cfPM>=0?'+':''}${Math.round(C.cfPM)} €/Mon.</b></span>
+<span class="kpi"><span>EK-Rendite p.a.</span><b style="color:${ekA?'#008300':ekW?'#b97e00':'#c43837'}">${C.ekRend>=0?'+':''}${C.ekRend.toFixed(2)} % ${ampel(ekA,ekW)}</b></span>
+<span class="kpi"><span>Bruttomietrendite</span><b>${C.brutto.toFixed(2)} % ${ampel(brA,brW)}</b></span>
+<span class="kpi"><span>Kaufpreis-Faktor</span><b>${C.faktor.toFixed(1)}×</b></span>
+</div>
+<h2>Parameter</h2>
+<table>
+${row('Kaufpreis',F(C.kp))}${row('Kaufnebenkosten ('+RS_.nkSatz.toLocaleString('de-DE')+' %)',F(C.nk))}${row('Eigenkapital (inkl. NK)',F(C.ek))}${row('Darlehen',F(C.darl))}
+${row('Wohnfläche',C.wf.toLocaleString('de-DE')+' m² · '+F(C.qmP)+'/m²')}${row('Kaltmiete',C.mq.toLocaleString('de-DE')+' €/m² → '+F(C.mietM)+'/Monat')}
+${row('Zins / Tilgung',C.zi.toLocaleString('de-DE')+' % / '+C.ti.toLocaleString('de-DE')+' %')}${row('Steuersatz / AfA-Satz',C.st.toLocaleString('de-DE')+' % / '+RS_.afaSatz.toLocaleString('de-DE')+' %')}
+${row('Instandhaltung',RS_.instandQm.toLocaleString('de-DE')+' €/m²/J. → '+F(C.instand)+'/Jahr')}
+</table>
+<h2>Finanzierung</h2>
+<table>
+${row('Annuität p.a. (Rate '+F(C.annPM)+'/Monat)',F(C.annPA))}${row('davon Zins (Jahr 1)',F(C.zinsPA))}${row('davon Tilgung (Jahr 1)',F(C.tilgPA))}
+</table>
+<h2>Steuerliche Rechnung</h2>
+<table>
+${row('Jahreskaltmiete',F(C.jnkm))}${row('− Zinsen',F(-C.zinsPA))}${row('− Instandhaltung',F(-C.instand))}${row('− AfA ('+RS_.afaSatz.toLocaleString('de-DE')+' % von '+F(C.afaG)+')',F(-C.afaPA))}
+${row('Steuerliches Ergebnis',F(C.vNachAfA),true)}${row(C.vNachAfA<0?'→ Steuererstattung ('+C.st.toLocaleString('de-DE')+' %)':'→ Steuerlast',F(C.vNachAfA<0?C.stErs:C.stLast))}
+</table>
+<h2>Cashflow</h2>
+<table>
+${row('Cashflow vor Steuern p.a.',F(C.cfVorStPA))}${row('Steuereffekt p.a.',F(C.stErs+C.stLast))}${row('Cashflow nach Steuern p.a. ('+(C.cfPM>=0?'+':'')+Math.round(C.cfPM)+' €/Monat)',F(C.cfPA),true)}
+${row('+ Tilgung (Vermögensaufbau) p.a.',F(C.tilgPA))}${row('Gesamtnutzen p.a.',F(C.cfPA+C.tilgPA),true)}
+${row('EK-Rendite p.a. (Gesamtnutzen ÷ EK)',(C.ekRend>=0?'+':'')+C.ekRend.toFixed(2)+' %',true)}
+</table>
+<p class="note">Annahmen: Annuitätendarlehen, Zins-/Tilgungsanteile Jahr 1; AfA-Basis 80 % des Kaufpreises; keine Mietausfälle, Leerstände oder Mietsteigerungen eingerechnet. Erstellt mit dem Immobilien-Cockpit am ${heute}. Keine Steuer- oder Anlageberatung.</p>
+</body></html>`);
+    w.document.close();
+    try{w.focus();}catch(e){}
+  });
   const csv=document.getElementById('rcCsv');
   if(csv) csv.addEventListener('click',()=>{
     const C=rcCalc();
