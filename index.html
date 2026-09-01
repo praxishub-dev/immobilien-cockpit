@@ -209,6 +209,24 @@ function migrateData(){
       ch=true;
     }
   }));
+  // Zähler Braustraße 8 (aus Fotos im Ordner „Zähler" ausgelesen, 01.09.2026)
+  const br=(DATA.objekte||[]).find(o=>o.id==='braustrasse');
+  if(br){
+    const neu=[
+      {art:'Strom',nummer:'1 ISK00 6855 3701',zuordnung:'EG („WG EG 1") · Stand 5.237 kWh (01.09.26)'},
+      {art:'Strom',nummer:'1 ISK00 7645 2795',zuordnung:'1. OG links (Feld „Pension") · Stand 5.393 kWh (01.09.26)'},
+      {art:'Strom',nummer:'1 ISK00 6855 3774',zuordnung:'1. OG rechts („Wo. 4") · Stand 10.325 kWh (01.09.26)'},
+      {art:'Strom',nummer:'1 ISK00 7645 2796',zuordnung:'2. OG rechts (Feld „Habedank") · Stand 1.518 kWh (01.09.26)'},
+      {art:'Strom',nummer:'1 ISK00 6855 3706',zuordnung:'DG links („W 3 DG li") · Stand 14.956 kWh (01.09.26)'},
+      {art:'Strom',nummer:'1 ISK00 7645 2794',zuordnung:'Allgemein (Feld „Fahrschule") · Stand 4.025 kWh (01.09.26)'},
+      {art:'Strom',nummer:'1 LGZ00 6745 0709',zuordnung:'ZUORDNUNG PRÜFEN (Foto IMG_8393; Landis+Gyr Zweirichtungszähler, Einbau 2024/25, Vorgänger-Nr. 69781) · Stand 18.278 kWh (01.09.26)'},
+      {art:'Gas',nummer:'9120048115',zuordnung:'Kühlraum Gewerbe EG (Kromschröder BK-G6, Stadtwerke Schaumburg-Lippe) · Stand 26.188,5 m³ (01.09.26)'}
+    ];
+    br.zaehler=br.zaehler||[];
+    neu.forEach(z=>{
+      if(!br.zaehler.some(x=>String(x.nummer||'').replace(/\s/g,'')===z.nummer.replace(/\s/g,''))){ br.zaehler.push(z); ch=true; }
+    });
+  }
   if(ch) store.set('ic_data',DATA);
   return ch;
 }
