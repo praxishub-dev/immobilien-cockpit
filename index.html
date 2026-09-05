@@ -248,6 +248,16 @@ function isoDate(d){ return d.toISOString().slice(0,10); }
 function allUnits(){ const u=[]; (DATA?.objekte||[]).forEach(o=>o.einheiten.forEach(e=>u.push({o,e}))); return u; }
 function unitById(id){ return allUnits().find(x=>x.e.id===id); }
 function warm(e){ return (e.kaltmiete||0)+(e.nk||0)+(e.hk||0)+(e.ust||0); }
+/* Soll-Warmmiete für einen bestimmten Monat ('YYYY-MM'): vor dem Wirksamkeitsmonat
+   der letzten Erhöhung gilt die alte Kaltmiete – sonst würden Alt-Monate fälschlich
+   als Rückstand erscheinen. */
+function warmAt(e,monat){
+  if(e.letzte_erhoehung && e.letzte_erhoehung.datum && e.letzte_erhoehung.alt!=null
+     && monat && monat < String(e.letzte_erhoehung.datum).slice(0,7)){
+    return (e.letzte_erhoehung.alt||0)+(e.nk||0)+(e.hk||0)+(e.ust||0);
+  }
+  return warm(e);
+}
 function mietspiegelOf(ort){ return (DATA?.mietspiegel||[]).find(m=>m.ort===ort); }
 
 /* ========== Mietspiegel- & Erhöhungslogik (§558/§557b BGB, vereinfacht) ========== */
@@ -546,7 +556,6 @@ function offeneMonate(o,e){
   const credits=PAYMENTS.filter(p=>p.betrag>0||p.manual);
   const months=[...new Set(credits.map(perOf).filter(Boolean))].sort();
   const beginn=e.mietbeginn?e.mietbeginn.slice(0,7):null;
-  const soll=warm(e);
   // Erster Monat, in dem für diese Einheit eine Zahlung erkannt wurde: frühere Monate liegen
   // i.d.R. vor dem Exportfenster des Kontoauszugs und werden nicht als offen gewertet.
   const paidMonths=months.filter(m=>credits.some(p=>perOf(p)===m && matchPayment(p)===e.id));
@@ -556,6 +565,7 @@ function offeneMonate(o,e){
     if(beginn && m<beginn) continue;
     if(firstPaid && m<firstPaid) continue;
     const ist=credits.filter(p=>perOf(p)===m && matchPayment(p)===e.id).reduce((s,p)=>s+p.betrag,0);
+    const soll=warmAt(e,m);  // Soll des jeweiligen Monats (berücksichtigt Mieterhöhungs-Datum)
     // Toleranz 5 Cent (Rundungsdifferenzen, z.B. USt-Beträge)
     if(ist+0.05<soll) out.push({monat:m, soll, ist, offen:Math.round((soll-ist)*100)/100});
   }
@@ -1156,7 +1166,7 @@ function viewBank(){
     });
     let sumSoll=0,sumIst=0,sumOffen=0;
     const rows = allUnits().filter(({e})=>e.mieter).map(({o,e})=>{
-      const soll = warm(e);
+      const soll = warmAt(e,sel);
       const pays = matched[e.id]||[];
       const ist = pays.reduce((s,p)=>s+p.betrag,0);
       const offen = Math.max(0, Math.round((soll-ist)*100)/100);
@@ -1345,7 +1355,8 @@ function matchPayment(p){
   if(best && tie) return null;
   // 3) exakter Warmmieten-Betrag (eindeutig) – nur wenn der Zweck nach Miete aussieht
   if(/miete|kaltmiete|warmmiete|nk|pacht/i.test(p.zweck||'')){
-    const amountHits=units.filter(({e})=>Math.abs(warm(e)-p.betrag)<0.01);
+    const pm=p.monat||p.datum?.slice(0,7);
+    const amountHits=units.filter(({e})=>Math.abs(warm(e)-p.betrag)<0.01||Math.abs(warmAt(e,pm)-p.betrag)<0.01);
     if(amountHits.length===1) return amountHits[0].e.id;
   }
   return null;
