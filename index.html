@@ -406,7 +406,7 @@ function autoReminders(){
   const t=today();
   allUnits().forEach(({o,e})=>{
     const c = mietCheck(o,e);
-    if(!e.gewerbe && e.mietart!=='index' && c.potenzial>50){
+    if(!e.gewerbe && e.mietart!=='index' && c.potenzial>=25){
       const er = erhReminder(o,e);
       if(er) list.push({titel:er.titel, datum:er.datum, notiz:er.notiz+` Quelle Mietspiegel: ${mietspiegelOf(o.ort)?.quelle||''}`, kat:'Mieterhöhung'});
     }
