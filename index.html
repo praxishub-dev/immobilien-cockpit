@@ -675,6 +675,34 @@ function openObjEdit(id){
   };
   dlg.showModal();
 }
+/* Neue Miete nach erfolgter Erhöhung übernehmen (setzt kaltmiete + letzte_erhoehung) */
+function openMietNeu(unitId){
+  const u=unitById(unitId); if(!u) return;
+  const o=u.o, e=u.e;
+  const c=mietCheck(o,e);
+  let dlg=document.getElementById('mietNeuDlg');
+  if(!dlg){ dlg=document.createElement('dialog'); dlg.id='mietNeuDlg'; dlg.style.width='min(440px,94vw)'; document.body.appendChild(dlg); }
+  const vorschlag=(c.ziel&&c.ziel>e.kaltmiete)?c.ziel:e.kaltmiete;
+  dlg.innerHTML=`<h3 style="margin:0 0 6px">Miete anpassen – ${esc(e.bezeichnung)}</h3>
+  <p class="note" style="margin:0 0 12px">${esc(e.mieter||'')} · aktuelle Kaltmiete ${EUR2(e.kaltmiete)}</p>
+  <label>Neue Kaltmiete (€/Monat)</label><input id="mnBetrag" type="text" value="${vorschlag}">
+  <label>Wirksam ab</label><input id="mnDatum" type="date" value="${isoDate(new Date(today().getFullYear(),today().getMonth(),1))}">
+  <p class="note" style="margin-top:10px">Speichert die neue Miete und merkt sich die Erhöhung (alt → neu, Datum). Daraus berechnet die App die nächste 15-Monats-Wartefrist, die Kappungsgrenze und den Soll-Abgleich unter „Bank &amp; Zahlungen". Synchronisiert auf alle Geräte.</p>
+  <div class="btnrow" style="justify-content:flex-end;margin-top:12px">
+    <button class="btn" id="mnCancel">Abbrechen</button>
+    <button class="btn primary" id="mnOk">Speichern</button></div>`;
+  dlg.querySelector('#mnCancel').onclick=()=>dlg.close();
+  dlg.querySelector('#mnOk').onclick=()=>{
+    const neu=deNum(dlg.querySelector('#mnBetrag').value);
+    const dat=dlg.querySelector('#mnDatum').value;
+    if(isNaN(neu)||neu<=0||!dat){ alert('Bitte Betrag und Datum prüfen.'); return; }
+    const neuR=Math.round(neu*100)/100;
+    if(neuR!==e.kaltmiete) e.letzte_erhoehung={datum:dat, alt:e.kaltmiete, neu:neuR};
+    e.kaltmiete=neuR;
+    store.set('ic_data',DATA); dlg.close(); render();
+  };
+  dlg.showModal();
+}
 function textDialog(titel, text){
   document.getElementById('txtT').textContent=titel;
   document.getElementById('txtA').value=text;
@@ -744,6 +772,7 @@ function render(){
   }));
   m.querySelectorAll('[data-pay]').forEach(el=>el.addEventListener('click',ev=>{ev.stopPropagation();openPayDialog(el.dataset.pay);}));
   m.querySelectorAll('[data-objedit]').forEach(el=>el.addEventListener('click',ev=>{ev.stopPropagation();openObjEdit(el.dataset.objedit);}));
+  m.querySelectorAll('[data-mietneu]').forEach(el=>el.addEventListener('click',ev=>{ev.stopPropagation();openMietNeu(el.dataset.mietneu);}));
   m.querySelectorAll('[data-copy]').forEach(el=>el.addEventListener('click',ev=>{ev.stopPropagation();copyTxt(el.dataset.copy,el);}));
   m.querySelectorAll('[data-kont]').forEach(el=>el.addEventListener('change',()=>{
     const [uid,feld]=el.dataset.kont.split(':');
@@ -1026,7 +1055,8 @@ function viewObjektDetail(id){
       <div style="display:flex;gap:4px;align-items:center"><input type="email" placeholder="E-Mail" data-kont="${e.id}:email" value="${esc(e.email||'')}" style="font-size:12px;padding:3px 6px">
       ${e.email?`<a class="btn small" href="mailto:${esc(e.email)}" title="Mail schreiben">✉</a><button class="btn small" data-copy="${esc(e.email)}" title="Kopieren">📋</button>`:''}</div>`:'<span class="mut">–</span>'}</td>
     <td style="white-space:nowrap">${erh?`<button class="btn small" title="Mieterhöhungs-Erinnerung als Kalenderdatei – terminiert so, dass der Brief rechtzeitig per Post zugeht (§558b)" data-icsdirect='${JSON.stringify(erh).replace(/'/g,"&#39;")}'>📅 Erhöhung</button><br>`:''}<button class="btn small" data-ics='${JSON.stringify(remind).replace(/'/g,"&#39;")}'>⏰</button>
-    <button class="btn small" title="Mieterhöhungs-Schreiben erstellen" data-brief='{"kind":"erh","id":"${e.id}"}'>✉ Erhöhung</button></td></tr>`;
+    <button class="btn small" title="Mieterhöhungs-Schreiben erstellen" data-brief='{"kind":"erh","id":"${e.id}"}'>✉ Erhöhung</button><br>
+    <button class="btn small" title="Neue Miete nach erfolgter Erhöhung übernehmen" data-mietneu="${e.id}">€ Miete anpassen</button></td></tr>`;
   }).join('');
   return `<span class="backlink" data-back>← alle Objekte</span>
   <h2>${esc(o.name)}</h2><p class="sub">${esc(o.adresse)} · ${esc(o.typ||'')} · Eigentümer: ${esc(o.eigentuemer||'–')}</p>
