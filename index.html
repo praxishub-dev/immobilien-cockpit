@@ -689,6 +689,190 @@ function openObjEdit(id){
   };
   dlg.showModal();
 }
+/* ========== Dokumente für Mieter (wählbare Vorlagen, automatisch befüllt) ========== */
+const HAUSORDNUNG_STD=`Ruhezeiten: Bitte halten Sie die allgemeinen Ruhezeiten ein (13–15 Uhr und 22–7 Uhr sowie ganztägig an Sonn- und Feiertagen). Musik und Fernsehen bitte stets auf Zimmerlautstärke.
+
+Treppenhaus und Keller: Treppenhaus, Flure und Kellergänge sind Flucht- und Rettungswege und müssen frei bleiben. Das Abstellen von Schuhen, Kartons oder Möbeln im Treppenhaus ist nicht gestattet.
+
+Fahrräder und Kinderwagen: Fahrräder bitte an den dafür vorgesehenen Plätzen bzw. im Fahrradkeller abstellen, nicht im Hauseingang. Kinderwagen dürfen platzsparend im Eingangsbereich stehen, wenn die Fluchtwege frei bleiben.
+
+Gemeinschaftsräume: Waschküche, Trockenraum und Gemeinschaftskeller bitte sauber hinterlassen und nach Nutzung abschließen.
+
+Reinigungspflichten: Die Reinigung von Treppenhaus und Zuwegen erfolgt im wöchentlichen Wechsel durch die Mietparteien (sofern kein Reinigungsdienst beauftragt ist). Der Reinigungsplan hängt im Hausflur aus bzw. wird mitgeteilt.
+
+Winterdienst: Räum- und Streupflicht auf den Zuwegen wird – soweit nicht anders geregelt – wechselweise von den Mietparteien übernommen. Zeiten: werktags 7–20 Uhr, sonn-/feiertags 9–20 Uhr.
+
+Grillen: Grillen mit offener Flamme (Holzkohle) ist auf Balkonen nicht gestattet; Elektrogrill ist erlaubt, sofern sich Nachbarn nicht durch Rauch belästigt fühlen. Im Garten/Hof bitte mit Rücksicht auf die Nachbarn.
+
+Garten- und Hofnutzung: Gemeinschaftsflächen stehen allen Mietparteien zur Verfügung. Bitte sauber hinterlassen; private Gegenstände nicht dauerhaft abstellen.
+
+Haustierhaltung: Kleintiere (z. B. Zierfische, Hamster) sind erlaubt. Die Haltung von Hunden und Katzen bedarf der vorherigen Zustimmung des Vermieters.
+
+Lüften und Heizen: Bitte regelmäßig stoßlüften (2–3× täglich) und alle Räume ausreichend beheizen, um Schimmelbildung zu vermeiden.
+
+Störungen und Schäden: Schäden am Haus oder in der Wohnung bitte umgehend dem Vermieter melden.`;
+function dritterWerktag(d){
+  let c=0, x=new Date(d.getFullYear(),d.getMonth(),1);
+  for(;;){ const wd=x.getDay(); if(wd!==0&&wd!==6){ c++; if(c===3) return new Date(x); } x.setDate(x.getDate()+1); }
+}
+const DOK_ARTEN={
+  info:'Informationsschreiben zum Mietbeginn',
+  hinweise:'Hinweise für den Mieter (Anmeldungen & Zählernummern)',
+  wgb:'Wohnungsgeberbestätigung (§ 19 BMG)',
+  hausordnung:'Hausordnung'
+};
+function dokHtml(o,e,x,typ){
+  const abs=(typeof nkAbsender==='function'?nkAbsender(o):absenderFor(o));
+  const absL=abs.split('\n').map(s=>s.trim()).filter(Boolean);
+  const heute=new Date().toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit',year:'numeric'});
+  const R=(l,v)=>`<tr><td>${esc(l)}</td><td class="n">${v}</td></tr>`;
+  const kopf=`<div class="abs">${absL.map(esc).join(' · ')}</div>
+  <div class="kopf"><div>${esc(x.personen||e.mieter||'[Mieter]')}<br>${esc(e.bezeichnung)}<br>${esc(o.adresse||'')}</div><div style="text-align:right">${heute}</div></div>`;
+  let inhalt='';
+  if(typ==='info'){
+    const gesamt=(e.kaltmiete||0)+(e.nk||0)+(e.hk||0)+(x.stellplatz||0)+(e.ust||0);
+    const beginn=e.mietbeginn?new Date(e.mietbeginn):null;
+    const faellig=beginn?dritterWerktag(beginn):null;
+    const iban=(o.mietkonto||'[IBAN bitte eintragen]').replace(/(.{4})/g,'$1 ').trim();
+    inhalt=`${kopf}
+<h1>Herzlich willkommen – Informationen zu Ihrem Mietbeginn</h1>
+<p>${anredeFor(x.personen||e.mieter)}</p>
+<p>wir freuen uns, Sie als neue Mieter begrüßen zu dürfen, und wünschen Ihnen einen guten Start in Ihrem neuen Zuhause. Damit von Anfang an alles reibungslos läuft, haben wir die wichtigsten Informationen zusammengestellt.</p>
+<h2>Mietobjekt und Mietbeginn</h2>
+<p>${esc(e.bezeichnung)}, ${esc(o.adresse||'')}${e.flaeche?` · ca. ${e.flaeche} m²`:''}<br>Mietbeginn: <b>${beginn?beginn.toLocaleDateString('de-DE'):'[Datum]'}</b></p>
+<h2>Monatliche Miete</h2>
+<table><thead><tr><th>Position</th><th style="text-align:right">Betrag</th></tr></thead><tbody>
+${R('Kaltmiete',EUR2(e.kaltmiete||0))}
+${R('Betriebskostenvorauszahlung',EUR2(e.nk||0))}
+${e.hk?R('Heizkostenvorauszahlung',EUR2(e.hk)):''}
+${x.stellplatz?R('Stellplatz-/Garagenmiete',EUR2(x.stellplatz)):''}
+${e.ust?R('Umsatzsteuer',EUR2(e.ust)):''}
+<tr class="sum"><td>Gesamtmiete monatlich</td><td class="n">${EUR2(gesamt)}</td></tr>
+</tbody></table>
+<h2>Zahlung</h2>
+<p>Die Miete ist monatlich im Voraus, spätestens am dritten Werktag eines Monats, fällig. Erste Fälligkeit: <b>${faellig?faellig.toLocaleDateString('de-DE'):'[Datum]'}</b>.</p>
+<div class="box"><b>Bankverbindung</b><br>Kontoinhaber: ${esc(absL[0]||'')}<br>IBAN: <span class="mono">${esc(iban)}</span><br>Verwendungszweck: <span class="mono">Miete ${esc(e.bezeichnung)}, ${esc(o.adresse||'')}</span></div>
+<p>Wir empfehlen, einen <b>Dauerauftrag</b> über ${EUR2(gesamt)} zum Monatsersten einzurichten – so gerät keine Zahlung in Verzug.</p>
+<h2>Mietkaution</h2>
+<p>Die Kaution beträgt <b>${x.kaution?EUR2(x.kaution):'[Betrag]'}</b>. Sie ist zu Mietbeginn fällig; auf Wunsch ist die Zahlung in drei gleichen Monatsraten möglich (§ 551 BGB), die erste Rate zu Beginn des Mietverhältnisses. Verwendungszweck: „Kaution ${esc(e.bezeichnung)}".</p>
+<p>Mit freundlichen Grüßen<br><br>${esc(absL[0]||'')}</p>`;
+  }
+  if(typ==='hinweise'){
+    const zae=(o.zaehler||[]);
+    const zRows=zae.length?zae.map(z=>`<tr><td>${esc(z.art||'')}</td><td class="mono">${esc(z.nummer||'')}</td><td>${esc(String(z.zuordnung||'').split('·')[0].trim())}</td></tr>`).join(''):`<tr><td colspan="3">[Zählernummern werden nachgereicht]</td></tr>`;
+    inhalt=`${kopf}
+<h1>Hinweise für Ihren Einzug</h1>
+<h2>1. Anmeldung beim Einwohnermeldeamt</h2>
+<p>Bitte melden Sie sich innerhalb von <b>zwei Wochen</b> nach Einzug beim Einwohnermeldeamt an. Die erforderliche Wohnungsgeberbestätigung erhalten Sie von uns.</p>
+<h2>2. Strom${zae.some(z=>/gas/i.test(z.art||''))?' und Gas':''} anmelden</h2>
+<p>Bitte melden Sie sich zeitnah bei einem Energieversorger Ihrer Wahl an (z. B. örtlicher Grundversorger oder über Vergleichsportale). Dafür benötigen Sie die Zählernummer${zae.length>1?'n':''}:</p>
+<table><thead><tr><th>Art</th><th>Zählernummer</th><th>Zuordnung</th></tr></thead><tbody>${zRows}</tbody></table>
+<p class="mut">Bitte notieren Sie beim Einzug den Zählerstand – er steht auch im Übergabeprotokoll.</p>
+<h2>3. Rundfunkbeitrag</h2>
+<p>Der Rundfunkbeitrag ist je Wohnung zu zahlen. An-/Ummeldung unter rundfunkbeitrag.de.</p>
+<h2>4. Ihr Kontakt zu uns</h2>
+<p>Bei Fragen oder Schäden erreichen Sie uns jederzeit:<br><b>${esc(absL.join(' · '))}</b></p>`;
+  }
+  if(typ==='hausordnung'){
+    inhalt=`<h1>Hausordnung – ${esc(o.adresse||o.name)}</h1>
+<p class="mut">Stand: ${heute} · Vermieter: ${esc(absL[0]||'')}</p>
+<div class="ho">${esc(x.hausordnung||'')}</div>`;
+  }
+  if(typ==='wgb'){
+    inhalt=`<h1>Wohnungsgeberbestätigung</h1>
+<p class="mut">gemäß § 19 Bundesmeldegesetz (BMG) – zur Vorlage beim Einwohnermeldeamt</p>
+<table class="wgb"><tbody>
+<tr><td style="width:40%">Wohnungsgeber</td><td>${esc(absL.join(', '))}</td></tr>
+<tr><td>Eigentümer der Wohnung</td><td>${esc(o.eigentuemer||absL[0]||'')}</td></tr>
+<tr><td>Anschrift der Wohnung</td><td>${esc(o.adresse||'')} – ${esc(e.bezeichnung)}</td></tr>
+<tr><td>Tatsächliches Einzugsdatum</td><td><b>${x.einzug?new Date(x.einzug).toLocaleDateString('de-DE'):'[Datum]'}</b></td></tr>
+<tr><td>Einziehende Person(en)</td><td>${esc(x.personen||e.mieter||'')}</td></tr>
+</tbody></table>
+<p>Hiermit wird der Einzug der oben genannten Person(en) in die genannte Wohnung bestätigt.</p>
+<p class="mut">Hinweis: Es ist verboten, eine Wohnungsgeberbestätigung auszustellen, wenn der Einzug tatsächlich nicht erfolgt (§ 54 BMG).</p>
+<div style="display:flex;gap:14mm"><span class="sigline">Ort, Datum</span><span class="sigline">Unterschrift Wohnungsgeber</span></div>`;
+  }
+  return `<!DOCTYPE html><html lang="de"><head><meta charset="UTF-8"><title>${esc(DOK_ARTEN[typ])} – ${esc(e.mieter||e.bezeichnung)}</title>
+<style>
+@page{size:A4;margin:16mm 20mm 14mm 25mm}
+body{font-family:Helvetica,Arial,sans-serif;font-size:10pt;line-height:1.4;color:#111;margin:0}
+.doc{max-width:660px;margin:0 auto;padding:24px 16px}
+h1{font-size:14pt;margin:0 0 4mm}
+h2{font-size:11pt;margin:4mm 0 1.5mm}
+.abs{font-size:8pt;color:#555;border-bottom:.5pt solid #999;padding-bottom:2px;margin-bottom:8mm}
+.kopf{display:flex;justify-content:space-between;margin-bottom:6mm}
+table{width:100%;border-collapse:collapse;margin:3mm 0;font-size:10pt}
+th{text-align:left;border-bottom:1pt solid #111;padding:4px 8px;font-size:8.5pt;text-transform:uppercase;letter-spacing:.4px}
+td{padding:4px 8px;border-bottom:.5pt solid #ccc}
+td.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+tr.sum td{border-top:1.5pt solid #111;font-weight:bold}
+.box{border:1pt solid #111;padding:4mm 5mm;margin:4mm 0}
+.mono{font-family:ui-monospace,Menlo,monospace;font-size:9.5pt}
+.mut{color:#555;font-size:9pt}
+.ho{white-space:pre-wrap}
+.sigline{display:inline-block;width:62mm;border-top:.75pt solid #111;margin-top:14mm;padding-top:1mm;font-size:8.5pt;color:#444}
+.wgb td{border-bottom:.5pt solid #999;padding:6px 8px}
+[contenteditable]:hover{outline:1.5px dashed #2a78d6;outline-offset:3px}
+.toolbar{position:fixed;top:0;left:0;right:0;display:flex;align-items:center;gap:16px;background:#fff8dc;border-bottom:1px solid #d9c869;padding:10px 14px;font-size:10pt;z-index:10}
+@media print{.toolbar{display:none!important}[contenteditable]:hover{outline:none}.doc{padding:0;max-width:none}}
+@media screen{body{background:#e8e8e8;padding-top:56px}.doc{background:#fff;box-shadow:0 2px 10px rgba(0,0,0,.2);margin:16px auto}}
+</style></head><body>
+<div class="toolbar"><div style="flex:1">✏️ <b>Alle Texte direkt anklickbar und änderbar.</b> Dann drucken oder als PDF sichern.${e.email?` <a href="mailto:${esc(e.email)}?subject=${encodeURIComponent(DOK_ARTEN[typ]+' – '+(o.adresse||''))}">✉ Mail an ${esc(e.mieter||'Mieter')}</a>`:''}</div>
+<button onclick="window.print()" style="flex-shrink:0;padding:8px 18px;cursor:pointer;background:#2a78d6;color:#fff;border:0;border-radius:6px">🖨 Drucken / Als PDF sichern</button></div>
+<div class="doc" contenteditable="true">${inhalt}</div>
+</body></html>`;
+}
+function openDok(unitId){
+  const u=unitById(unitId); if(!u) return;
+  const o=u.o, e=u.e;
+  let dlg=document.getElementById('dokDlg');
+  if(!dlg){ dlg=document.createElement('dialog'); dlg.id='dokDlg'; dlg.style.width='min(560px,94vw)'; document.body.appendChild(dlg); }
+  dlg.innerHTML=`<h3 style="margin:0 0 6px">Dokument erstellen – ${esc(e.mieter||e.bezeichnung)}</h3>
+  <p class="note" style="margin:0 0 12px">${esc(o.name)} · ${esc(e.bezeichnung)}. Alle Daten aus dem System sind bereits eingearbeitet.</p>
+  <label>Dokument</label>
+  <select id="dkTyp">${Object.entries(DOK_ARTEN).map(([k,v])=>`<option value="${k}">${v}</option>`).join('')}</select>
+  <div id="dkFields" style="margin-top:10px"></div>
+  <div class="btnrow" style="justify-content:flex-end;margin-top:12px">
+    <button class="btn" id="dkCancel">Abbrechen</button>
+    <button class="btn primary" id="dkOk">📄 Erstellen</button></div>`;
+  const fields=()=>{
+    const t=dlg.querySelector('#dkTyp').value;
+    let h='';
+    if(t==='info'||t==='wgb') h+=`<label>Einziehende Person(en)</label><input id="dkPers" type="text" value="${esc(e.mieter||'')}" placeholder="z.B. Max Mustermann, Erika Mustermann">`;
+    if(t==='wgb') h+=`<label>Tatsächliches Einzugsdatum</label><input id="dkEinzug" type="date" value="${esc(e.mietbeginn||'')}">`;
+    if(t==='info') h+=`<div class="frow"><div><label>Stellplatz-/Garagenmiete (€/Monat, leer = keiner)</label><input id="dkStell" type="text" value="${e.stellplatz||''}"></div>
+      <div><label>Kaution (€)</label><input id="dkKaution" type="text" value="${e.kaution||''}" placeholder="z.B. ${(e.kaltmiete||0)*3}"></div></div>`;
+    if(t==='hausordnung') h+=`<label>Hausordnung für ${esc(o.name)} (wird je Objekt gespeichert und wiederverwendet)</label>
+      <textarea id="dkHo" rows="10" style="font-size:12px">${esc(o.hausordnung||HAUSORDNUNG_STD)}</textarea>`;
+    if(!h) h='<p class="note">Keine weiteren Angaben nötig – alle Daten kommen aus dem System.</p>';
+    dlg.querySelector('#dkFields').innerHTML=h;
+  };
+  fields();
+  dlg.querySelector('#dkTyp').addEventListener('change',fields);
+  dlg.querySelector('#dkCancel').onclick=()=>dlg.close();
+  dlg.querySelector('#dkOk').onclick=()=>{
+    const t=dlg.querySelector('#dkTyp').value;
+    const g=id=>dlg.querySelector('#'+id);
+    const stell=g('dkStell')?deNum(g('dkStell').value):NaN;
+    const kaut=g('dkKaution')?deNum(g('dkKaution').value):NaN;
+    const x={personen:g('dkPers')?g('dkPers').value.trim():(e.mieter||''),
+      einzug:g('dkEinzug')?g('dkEinzug').value:'',
+      stellplatz:isNaN(stell)?(e.stellplatz||0):stell,
+      kaution:isNaN(kaut)?(e.kaution||0):kaut,
+      hausordnung:g('dkHo')?g('dkHo').value.trim():(o.hausordnung||HAUSORDNUNG_STD)};
+    let ch=false;
+    if(x.stellplatz&&x.stellplatz!==e.stellplatz){ e.stellplatz=x.stellplatz; ch=true; }
+    if(x.kaution&&x.kaution!==e.kaution){ e.kaution=x.kaution; ch=true; }
+    if(t==='hausordnung'&&x.hausordnung&&x.hausordnung!==o.hausordnung){ o.hausordnung=x.hausordnung; ch=true; }
+    if(ch) store.set('ic_data',DATA);
+    dlg.close();
+    const w=window.open('','_blank');
+    if(!w){ alert('Popup blockiert – bitte Popups für diese Seite erlauben.'); return; }
+    w.document.write(dokHtml(o,e,x,t)); w.document.close(); try{w.focus();}catch(err){}
+  };
+  dlg.showModal();
+}
+
 /* Neue Miete nach erfolgter Erhöhung übernehmen (setzt kaltmiete + letzte_erhoehung) */
 function openMietNeu(unitId){
   const u=unitById(unitId); if(!u) return;
@@ -787,6 +971,7 @@ function render(){
   m.querySelectorAll('[data-pay]').forEach(el=>el.addEventListener('click',ev=>{ev.stopPropagation();openPayDialog(el.dataset.pay);}));
   m.querySelectorAll('[data-objedit]').forEach(el=>el.addEventListener('click',ev=>{ev.stopPropagation();openObjEdit(el.dataset.objedit);}));
   m.querySelectorAll('[data-mietneu]').forEach(el=>el.addEventListener('click',ev=>{ev.stopPropagation();openMietNeu(el.dataset.mietneu);}));
+  m.querySelectorAll('[data-dok]').forEach(el=>el.addEventListener('click',ev=>{ev.stopPropagation();openDok(el.dataset.dok);}));
   m.querySelectorAll('[data-copy]').forEach(el=>el.addEventListener('click',ev=>{ev.stopPropagation();copyTxt(el.dataset.copy,el);}));
   m.querySelectorAll('[data-kont]').forEach(el=>el.addEventListener('change',()=>{
     const [uid,feld]=el.dataset.kont.split(':');
@@ -1071,6 +1256,7 @@ function viewObjektDetail(id){
     <td style="white-space:nowrap">${erh?`<button class="btn small" title="Mieterhöhungs-Erinnerung als Kalenderdatei – terminiert so, dass der Brief rechtzeitig per Post zugeht (§558b)" data-icsdirect='${JSON.stringify(erh).replace(/'/g,"&#39;")}'>📅 Erhöhung</button><br>`:''}<button class="btn small" data-ics='${JSON.stringify(remind).replace(/'/g,"&#39;")}'>⏰</button>
     <button class="btn small" title="Mieterhöhungs-Schreiben erstellen" data-brief='{"kind":"erh","id":"${e.id}"}'>✉ Erhöhung</button><br>
     <button class="btn small" title="Neue Miete nach erfolgter Erhöhung übernehmen" data-mietneu="${e.id}">€ Miete anpassen</button><br>
+    <button class="btn small" title="Dokument aus Vorlage erstellen (Infoschreiben, Hinweise, Wohnungsgeberbestätigung, Hausordnung)" data-dok="${e.id}">📑 Dokumente</button>
     <button class="btn small" title="Leeren Brief-Vordruck mit Briefkopf und Mieter-Anschrift öffnen" data-brief='{"kind":"frei","id":"${e.id}"}'>✍ Brief</button></td></tr>`;
   }).join('');
   return `<span class="backlink" data-back>← alle Objekte</span>
