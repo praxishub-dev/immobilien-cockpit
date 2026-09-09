@@ -1,8 +1,1 @@
-{
-  "stand": "2026-09-07",
-  "bundesweit": {
-    "trend_pa": 1.9,
-    "quelle": "vdp-Immobilienpreisindex Q2/2026: Wohnimmobilien +1,9 % ggü. Vorjahr (ETW +2,6 %, MFH +1,6 %, Eigenheime +2,0 %; ggü. Vorquartal +0,3 %). Bauzins 10 J.: eff. Topzins ca. 3,97 % (Dr. Klein, Stand 04.09.2026); Dr.-Klein-Prognose H2/2026: Korridor 3,3–3,9 %."
-  },
-  "hinweis": "Regionale Angebotspreise (immowelt, Stand 08–09/2026): Bückeburg Wohnungen +3,8 %, Häuser +1,1 % ggü. Vorjahr; Bad Oeynhausen Wohnungen +1,1 %, Häuser +6,0 %; Lingen (Ems) Wohnungen +1,4 %, Häuser +1,6 %. Die Region entwickelt sich damit leicht über bzw. nahe dem Bundestrend, ohne Überhitzung. Automatisches Update alle 2 Tage."
-}
+{"stand":"2026-09-09","bundesweit":{"trend_pa":1.9,"quelle":"vdp-Immobilienpreisindex Q2/2026: Wohnimmobilien +1,9 % ggü. Vorjahr (+0,3 % ggü. Vorquartal; ETW +2,6 %, MFH +1,6 %, Neuvertragsmieten MFH +3,2 %). Bauzins 10 J. ca. 3,7 % effektiv; Dr.-Klein-Prognose H2/2026: Seitwärtsbewegung mit leichter Aufwärtstendenz, Spanne 3,3–3,9 %."},"hinweis":"Regional uneinheitlich: In Bückeburg liegen die Angebotspreise leicht über Vorjahr (Wohnungen +0,9 %, Häuser +2,3 %), in Lingen (Ems) moderat im Plus (Häuser +1,3 %, Wohnungen +0,6 %), während Bad Oeynhausen leicht nachgibt (Häuser −0,8 %, Wohnungen −0,7 %) – jeweils Angebotspreise laut Engel & Völkers Marktdaten, Stand Juni–August 2026. Automatisches Update alle 2 Tage."}
