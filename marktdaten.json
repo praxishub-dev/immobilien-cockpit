@@ -1,1 +1,8 @@
-{"stand":"2026-09-13","bundesweit":{"trend_pa":1.9,"quelle":"vdp-Immobilienpreisindex Q2/2026: Wohnimmobilien +1,9 % ggü. Vorjahresquartal (ETW +2,6 %, Eigenheime +2,0 %, MFH +1,6 %; Neuvertragsmieten +3,2 %). Bauzins 10 J. aktuell ca. 3,7-4,0 %; Dr.-Klein-Prognose 2. Hj. 2026: 3,3-3,9 % mit Aufwärtstendenz."},"hinweis":"Regional stabil bis leicht steigend: Bückeburg Häuser +2,3 %, Wohnungen +0,9 % ggü. Vorjahr; Lingen (Ems) Häuser +1,3 %, Wohnungen +0,6 %; Bad Oeynhausen weitgehend stabil (Wohnungen -0,7 %, Häuser seitwärts). Quelle: Engel & Völkers Preisatlas (Angebotspreise), Stand Mitte 2026. Automatisches Update alle 2 Tage."}
+{
+  "stand": "2026-09-15",
+  "bundesweit": {
+    "trend_pa": 1.9,
+    "quelle": "vdp-Immobilienpreisindex Q2/2026: Wohnen +1,9 % ggü. Vorjahr (MFH +1,6 %, ETW +2,6 %). Prognose Dr. Klein für 2026: ca. +3 % bei Wohnimmobilien. Bauzins 10 J. Zinsbindung ca. 3,9–4,1 % (Dr. Klein, Stand 14.09.2026)."
+  },
+  "hinweis": "Schaumburg: ETW +10 % (Bückeburg +18 %), Ein-/Zweifamilienhäuser +1 % ggü. Vorjahr (empirica/LBS NordWest, Q1/2026). Bad Oeynhausen seitwärts: Häuser ca. +1 %, Wohnungen ca. -1 % ggü. Vorjahr (Engel & Völkers, Angebotspreise 09/2026); Lingen (Ems) moderat steigend: Häuser +1,3 %, Wohnungen +0,6 % (Engel & Völkers, 06/2026). Automatisches Update alle 2 Tage."
+}
