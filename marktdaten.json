@@ -1,8 +1,1 @@
-{
-  "stand": "2026-09-15",
-  "bundesweit": {
-    "trend_pa": 1.9,
-    "quelle": "vdp-Immobilienpreisindex Q2/2026: Wohnen +1,9 % ggü. Vorjahr (MFH +1,6 %, ETW +2,6 %). Prognose Dr. Klein für 2026: ca. +3 % bei Wohnimmobilien. Bauzins 10 J. Zinsbindung ca. 3,9–4,1 % (Dr. Klein, Stand 14.09.2026)."
-  },
-  "hinweis": "Schaumburg: ETW +10 % (Bückeburg +18 %), Ein-/Zweifamilienhäuser +1 % ggü. Vorjahr (empirica/LBS NordWest, Q1/2026). Bad Oeynhausen seitwärts: Häuser ca. +1 %, Wohnungen ca. -1 % ggü. Vorjahr (Engel & Völkers, Angebotspreise 09/2026); Lingen (Ems) moderat steigend: Häuser +1,3 %, Wohnungen +0,6 % (Engel & Völkers, 06/2026). Automatisches Update alle 2 Tage."
-}
+{"stand":"2026-09-17","bundesweit":{"trend_pa":1.9,"quelle":"vdp-Immobilienpreisindex Q2/2026: Wohnimmobilien +1,9 % ggü. Vorjahr (ETW +2,6 %, MFH +1,6 %). Prognose Dr. Klein für 2026: ca. +3 %. Bauzins 10 J. Zinsbindung: ca. 3,7–4,0 % (Dr. Klein, Stand 09/2026)."},"hinweis":"Regional uneinheitlich: Lingen (Ems) Häuser +5,3 %, Wohnungen +1,2 % ggü. Vorjahr (Engel & Völkers, Stand 09/2026); Bad Oeynhausen Wohnungen ca. +1 %, Häuser ca. +6 % (immowelt, Stand 08/2026). Für den Kreis Schaumburg meldete der Gutachterausschuss zuletzt für 2024 eine Marktbelebung (EFH +7 %, MFH +36 %), aktuellere Kreiszahlen liegen nicht vor. Automatisches Update alle 2 Tage."}
