@@ -1,8 +1,1 @@
-{
-  "stand": "2026-09-29",
-  "bundesweit": {
-    "trend_pa": 1.9,
-    "quelle": "vdp-Immobilienpreisindex Q2 2026: Wohnimmobilien +1,9 % ggü. Vorjahr (+0,3 % ggü. Vorquartal). Prognose Dr. Klein für 2026: bundesweit ca. +3 %, Metropolen bis +4-5 %. Bauzins 10 J. Zinsbindung aktuell ca. 3,7-4,2 % (Interhyp, Stand 09/2026)."
-  },
-  "hinweis": "Regional zeigen die Angebotspreise (immowelt, Stand 01.09.2026) moderates Wachstum: Bückeburg Wohnungen 2.096 €/m² (+3,8 % ggü. Vorjahr), Bad Oeynhausen Wohnungen 2.409 €/m² (+1,1 %), Häuser +6,0 %, Lingen (Ems) Wohnungen 2.258 €/m² (+1,4 %), Häuser +1,6 %. Die Region OWL/Schaumburg/Emsland läuft damit weiter stabil seitwärts bis leicht aufwärts. Automatisches Update alle 2 Tage."
-}
+{"stand":"2026-10-01","bundesweit":{"trend_pa":1.9,"quelle":"vdp-Immobilienpreisindex Q2 2026: Wohnen +1,9 % ggü. Vorjahr (Mehrfamilienhäuser +1,6 %, ETW +2,6 %), Neuvertragsmieten MFH +3,2 %. Bauzins 10 J. ca. 3,6–4,0 % (Dr. Klein, Stand Sept. 2026)."},"hinweis":"Bückeburg/Schaumburg: Wohnungen +2,3 % ggü. Vorjahr (ca. 2.090 €/m²), Häuser leicht rückläufig (immowelt, 10/2026). Bad Oeynhausen uneinheitlich: Wohnungen ca. -6 %, Häuser ca. +4 % (immoportal, 2026). Lingen (Ems): Angebotspreise leicht steigend, Häuser ca. 2.450 €/m², Wohnungen ca. 3.400 €/m² (Engel & Völkers, 06/2026). Automatisches Update alle 2 Tage."}
