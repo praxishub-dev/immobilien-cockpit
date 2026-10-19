@@ -597,7 +597,7 @@ function migrateData(){
       sw18.vermoegen = sw18.vermoegen || {};
       const v18 = sw18.vermoegen;
       const q18 = String(v18.afa_quelle||'');
-      if(!/RND38-NE116097/.test(q18) && !/manuell/i.test(q18)){
+      if(!/RND38-NE116097/.test(q18) && !/AFA-FIX-AUS/.test(q18)){
         const anteil18 = (v18.gebaeude_anteil!=null ? Number(v18.gebaeude_anteil) : 80)/100;
         const kp18 = Number(sw18.kaufpreis)||0;
         if(kp18>0) v18.afa_jahr = Math.round(kp18*anteil18/38);
@@ -720,7 +720,7 @@ function migrateData(){
       lu19.vermoegen = lu19.vermoegen || {};
       const v19 = lu19.vermoegen;
       const q19 = String(v19.afa_quelle||'');
-      if(!/RND27-NE118070/.test(q19) && !/manuell/i.test(q19)){
+      if(!/RND27-NE118070/.test(q19) && !/AFA-FIX-AUS/.test(q19)){
         const an19 = (v19.gebaeude_anteil!=null ? Number(v19.gebaeude_anteil) : 80)/100;
         const kp19 = Number(lu19.kaufpreis)||0;
         if(kp19>0) v19.afa_jahr = Math.round(kp19*an19/27);
@@ -841,7 +841,7 @@ function migrateData(){
       o.vermoegen = o.vermoegen || {};
       const v = o.vermoegen;
       if(new RegExp(marker).test(String(v.afa_quelle||''))) return false;
-      if(/manuell/i.test(String(v.afa_quelle||''))) return false;
+      if(/AFA-FIX-AUS/.test(String(v.afa_quelle||''))) return false;
       const anteil = (v.gebaeude_anteil!=null ? Number(v.gebaeude_anteil) : 80)/100;
       const kp = Number(o.kaufpreis)||0;
       v.afa_satz = Math.round(100/rnd*100)/100;
@@ -886,6 +886,41 @@ function migrateData(){
         + 'den Wert nicht mehr an.');
       ch=true;
     });
+  }
+  // === 19.10.2026 (Nachtrag): Luisenstraße – Bodenwert-Plausibilisierung auf den im Cockpit
+  // hinterlegten Kaufpreis umstellen (vorher war pauschal 435.000 € aus dem Rechner-PDF genannt) ===
+  {
+    const lu2 = (DATA.objekte||[]).find(o=>/luisenstr/i.test((o.name||'')+' '+(o.adresse||'')+' '+(o.ort||'')));
+    if(lu2 && lu2.vermoegen && !/GA85-LUI-v2/.test(String(lu2.vermoegen.afa_quelle||''))
+       && /GA85-LUI/.test(String(lu2.vermoegen.afa_quelle||''))){
+      const kp2 = Number(lu2.kaufpreis)||0;
+      const boden = Math.round(kp2*0.15);
+      const proM2 = kp2>0 ? Math.round(boden/499.10*100)/100 : 0;
+      lu2.vermoegen.afa_quelle = 'GA85-LUI-v2 | RND27-NE118070 | Gebäudeanteil 85 % / Grund und Boden 15 % '
+        + '(Entscheidung Christian, 19.10.2026). Plausibilisierung auf Basis des im Cockpit hinterlegten '
+        + 'Kaufpreises von ' + kp2.toLocaleString('de-DE') + ' €: Grundstück 499,10 m² (Flurstück 114) laut '
+        + 'RND-Gutachten, 15 % davon = ' + boden.toLocaleString('de-DE') + ' € Bodenwert = '
+        + String(proM2).replace('.',',') + ' €/m². Durchschnittlicher Bodenrichtwert der PLZ 32545: 104 €/m² '
+        + '(Stichtag 01.01.2026, Spanne 60–700 €/m², BORIS NRW / bodenrichtwerte-deutschland.de) – der Ansatz '
+        + 'liegt darüber und ist damit konservativ. WICHTIG: zonengenauen Bodenrichtwert beim Gutachterausschuss '
+        + 'Minden-Lübbecke als Nachweis zur Akte nehmen. AfA-Grundlage: Restnutzungsdauer 27 Jahre aus dem '
+        + 'Gutachten Ruth Gierhake vom 16.10.2026, Az. NE-118070 = 3,70 %/Jahr. Der AfA-Betrag rechnet nur mit '
+        + 'dem Kaufpreis OHNE Kaufnebenkosten. ACHTUNG: Objekt im Erwerb – AfA erst ab Übergang von Nutzen und '
+        + 'Lasten, im Erwerbsjahr nur monatsanteilig (§ 7 Abs. 1 S. 4 EStG). Aufteilung im Kaufvertrag '
+        + 'festschreiben und mit Kricheldorf abstimmen.';
+      lu2.notizen = lu2.notizen || [];
+      const k2='ACHTUNG: Kaufpreis Luisenstraße – zwei verschiedene Zahlen im Umlauf';
+      if(!lu2.notizen.some(n=>String(n).indexOf(k2)>=0)){
+        lu2.notizen.push(k2+': Im Cockpit stehen ' + kp2.toLocaleString('de-DE') + ' €, im Immobilien-Rechner '
+          + '(„mit RND Immobilien-Rechner · Specht & Waschkowski.pdf“, erstellt 16.09.2026) stehen 435.000 € '
+          + 'Kaufpreis plus 52.505 € Kaufnebenkosten (12,07 %). Vor dem Notartermin klären, welche Zahl gilt – '
+          + 'davon hängen AfA-Bemessungsgrundlage, die 15-%-Grenze nach § 6 Abs. 1 Nr. 1a EStG und die '
+          + 'Bodenwertquote ab. Frühere Notizen in diesem Objekt, die 435.000 € nennen, stammen aus der '
+          + 'Rechner-Fassung. [19.10.2026]');
+        ch=true;
+      }
+      ch=true;
+    }
   }
   // Standard-Absender einmalig vorbelegen (in Einstellungen jederzeit änderbar)
   DATA.meta=DATA.meta||{};
