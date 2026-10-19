@@ -457,6 +457,436 @@ function migrateData(){
       }
     }
   }
+  // === Ordnerscan 11.10.2026: neue Unterlagen aus dem Immobilien-Ordner einarbeiten ===
+  {
+    const _find = re => (DATA.objekte||[]).find(o=>re.test((o.name||'')+' '+(o.adresse||'')+' '+(o.ort||'')));
+    const _note = (o,key,txt) => {
+      if(!o) return false;
+      o.notizen = o.notizen || [];
+      if(o.notizen.some(n=>String(n).indexOf(key)>=0)) return false;
+      o.notizen.push(txt); return true;
+    };
+    const _einheit = (o,re) => o ? (o.einheiten||[]).find(e=>re.test((e.mieter||'')+' '+(e.bezeichnung||''))) : null;
+
+    // --- ETW Ortheide 37, Rehren (31749 Auetal): Kuendigung Schumacher & Koehler (Scan ohne Textlayer) ---
+    const ort = _find(/ortheide|rehren|auetal/i);
+    if(_note(ort,'Kündigung Schumacher & Köhler: Mietende 31.12.2026',
+      'WICHTIG: Kündigung Schumacher & Köhler: Mietende 31.12.2026 (Angabe Christian, 13.10.2026) – passt zur '
+      + 'ordentlichen Kündigung zum Monatsende nach § 573c BGB. Kündigungsschreiben liegt nur als Scan ohne '
+      + 'Textlayer vor: „ETW Ortheide 37, Rehren, 31749 Auetal/Mieter Schumacher & Köhler/'
+      + 'Kündigung Schumacher & Köhler .pdf" (1 Seite, abgelegt 05.10.2026). '
+      + 'Offene Schritte bis 31.12.2026: Übergabetermin und Wohnungsabnahme terminieren, Zählerstände ablesen, '
+      + 'Kautionsabrechnung, Nachvermietung starten; danach Vormieter-Eintrag mit Mietdaten setzen. '
+      + '[Stand 13.10.2026]')) ch=true;
+    const eSK = _einheit(ort,/schumacher|köhler|koehler/i);
+    if(eSK && !/Mietende 31\.12\.2026/.test(eSK.besonderheiten||'')){
+      eSK.besonderheiten = ('ACHTUNG: gekündigt – Mietende 31.12.2026 (Angabe Christian 13.10.2026; '
+        + 'Kündigungsschreiben als Scan im Ordner „Mieter Schumacher & Köhler"). Übergabe/Abnahme, '
+        + 'Zählerstände, Kautionsabrechnung und Nachvermietung terminieren. '
+        + String(eSK.besonderheiten||'')
+            .replace(/ACHTUNG: Kündigung liegt vor \(Scan[^]*?manuell prüfen\.\s*/,'')
+            .replace(/ACHTUNG: gekündigt – Mietende 21\.12\.2026[^]*?terminieren\.\s*/,'')).trim();
+      ch=true;
+    }
+
+    // --- Luisenstrasse 14, 32545 Bad Oeynhausen (im Erwerb): Grundbuch, Modernisierung, Finanzierung ---
+    const lui = _find(/luisenstr/i);
+    if(_note(lui,'Grundbuch Bad Oeynhausen Blatt 824',
+      'Grundbuch Bad Oeynhausen Blatt 824, Abdruck vom 04.09.2026 (letzte Änderung 02.06.2022), '
+      + 'Gebäude- und Freifläche, Katasterberichtigung 02.06.2022. Eigentum: Bondyl Küssner geb. Heine (1/2) '
+      + 'und Thomas Küssner (1/2), Auflassung vom 29.07.2011, eingetragen 20.09.2011; weiterer Eintrag '
+      + 'Luisa Küssner (Auflassung 27.10.2021, eingetragen 02.06.2022). WICHTIG Abt. II: '
+      + 'Eigentumsübertragungsvormerkung für Eheleute Küssner (UR-Nr. 425/2011, Notar Bernd Iburg, '
+      + 'eingetragen 11.08.2011, Rang nach Abt. III Nr. 21), Nießbrauch löschbar bei Todesnachweis und '
+      + 'Rückauflassungsvormerkung, beide für Eheleute Küssner (UR-Nr. 335/2021, Notarin Stefanie Hambruch, '
+      + 'eingetragen 02.06.2022). Vor Kaufvertrag Löschung/Freigabe dieser Rechte sowie den Inhalt der '
+      + 'Abteilung III (Grundpfandrechte) klären – Abt. III ist im Textauszug nicht enthalten. '
+      + 'Quelle: Dokumente/Grundbuchauzug.pdf (identisch mit BadOeynhausen_BadOeynhausen_824.pdf, 9 Seiten). '
+      + '[Ordnerscan 11.10.2026]')) ch=true;
+    if(_note(lui,'Modernisierungsaufstellung, Stand 07.10.2026',
+      'Modernisierungsaufstellung, Stand 07.10.2026 (Christian Specht): Mehrfamilienhaus, 5 Wohneinheiten '
+      + '+ Garage, Wohnfläche ca. 312 m², Baujahr 1935. Bisher keine eigenen Maßnahmen (Objekt im Erwerb). '
+      + 'Geplant nach Besitzübergang: (1) Austausch ca. 15 Kunststofffenster Untergeschoss, 2-fach-Verglasung '
+      + 'inkl. Einbau, (2) Fassadenanstrich Straßenseite inkl. Gerüst – Gesamtbudget Pos. 1+2 30.000 €, '
+      + 'vollständig aus Eigenmitteln, keine Fremdfinanzierung. Kosten eigene Schätzung/erste Angebote; '
+      + 'Mieterhöhung laut Aufstellung nicht zwingend vorgesehen. '
+      + 'Quelle: Mietverträge/Modernisierungsaufstellung_Luisenstr14_Bad_Oeynhausen.pdf. [Ordnerscan 11.10.2026]')) ch=true;
+    if(_note(lui,'Verbindlichkeitenaufstellung Praxen, Stichtag 30.09.2026',
+      'Verbindlichkeitenaufstellung Praxen, Stichtag 30.09.2026 (erstellt 06.10.2026) – Finanzierungsunterlage '
+      + 'für den Erwerb, betrifft NICHT dieses Objekt: Therapiepraxis Marcel Cardinal eGbR, Lingen, '
+      + 'Sparkasse Emsland, Darlehen 6134244299, Auszahlung 08/2025, 180.000 €, Rate 1.885,35 €/Mon., '
+      + 'Restschuld 164.553 €. Therapie Praxis Specht & Waschkowski, Rinteln, Commerzbank, Darlehen 69073260, '
+      + 'Auszahlung 02/2023, 114.000 €, Rate 1.544,00 €/Mon., Restschuld 87.125 €. Summe: 294.000 € '
+      + 'Ursprung, 3.429,35 €/Mon., 251.678 € Restschuld. Restschuld rechnerisch ermittelt – verbindlich sind '
+      + 'die Saldenbestätigungen der Banken. '
+      + 'Quelle: Mietverträge/Verbindlichkeitenaufstellung_Praxen_2026-09-30.pdf. [Ordnerscan 11.10.2026]')) ch=true;
+
+    // --- Lindenweg 2, 31675 Bueckeburg: Teilungsentwurf 2025 (Scan ohne Textlayer) ---
+    const lin = _find(/lindenweg/i);
+    if(_note(lin,'Teilungsentwurf Lindenweg 2025: Flurstück 26/11',
+      'Teilungsentwurf Lindenweg 2025: Flurstück 26/11 wird geteilt (Lageplan-Scan, am 13.10.2026 visuell '
+      + 'ausgewertet). Abzutrennende Teilfläche im Westen/Südwesten Richtung Steinberger Straße: ca. 673 m², '
+      + 'begrenzt durch die rot eingezeichnete Teilungslinie über die Punkte A–F–E–D. Restgrundstück mit dem '
+      + 'Gebäude Lindenweg 2 / 2A / 2B / 2C: ca. 1.160 m². Gesamtfläche damit ca. 1.833 m². Angrenzende '
+      + 'Flurstücke: 50/31 und 29/31 (nördlich am Lindenweg), 49/3 (südwestlich), Steinberger Straße im Westen. '
+      + 'WICHTIG: Alle Flächen sind handschriftliche ca.-Angaben aus dem Entwurf – verbindlich erst nach '
+      + 'Vermessung und Fortführungsnachweis. Entwurfsdatum und ausführendes Vermessungsbüro gehen aus dem '
+      + 'Scan nicht hervor. Quelle: „Lindenweg 2, 31675 Bückeburg/Teilungsentwurf Grundstück Lindenweg 2025.pdf". '
+      + '[Stand 13.10.2026]')) ch=true;
+
+    // --- Praxis Duetzen / Luebbecker Str. 200, Minden: NK-Einzelrechnung Schmutzwasser 2026 ---
+    const due = _find(/dützen|duetzen|lübbecker|luebbecker|minden/i);
+    if(_note(due,'Schmutzwasser-Rechnung 2026 (Scan',
+      'WICHTIG: Schmutzwasser-Rechnung 2026 (Scan, nicht maschinenlesbar) liegt im Ordner '
+      + '„Praxis Dützen/Nebenkosten Rechnung 2026/Re Schmutzwasser Real Estate.pdf" (1 Seite, kein Textlayer, '
+      + 'abgelegt 03.10.2026). Nicht auslesbar und manuell nachzutragen: Rechnungsnummer, Rechnungsdatum, '
+      + 'Netto-/Bruttobetrag und Leistungszeitraum. Umlagekategorie: Entwässerung/Schmutzwasser '
+      + '(§ 2 Nr. 3 BetrKV). TEILBETRAG einer Einzelrechnung – bewusst NICHT in die NK-Positionen der '
+      + 'Jahresabrechnung eingetragen, sonst wird die Abrechnung verfälscht. [Ordnerscan 11.10.2026]')) ch=true;
+
+    // --- Schubertweg 15: AfA-Betrag aus RND-Gutachten 06.10.2026 (37 Jahre) nur ergaenzen, wenn leer ---
+    const swg = _find(/schubertweg/i);
+    if(swg){
+      swg.vermoegen = swg.vermoegen || {};
+      const v = swg.vermoegen;
+      const anteil = (v.gebaeude_anteil!=null ? Number(v.gebaeude_anteil) : 80)/100;
+      if(!(v.afa_jahr>0) && Number(swg.kaufpreis)>0){
+        v.afa_jahr = Math.round(Number(swg.kaufpreis)*anteil/37);
+        v.afa_quelle = 'RND-Gutachten Claudia Fürderer (Dipl.-Sachverständige DIA, Zert.-Nr. DIA-IB-930) '
+          + 'vom 06.10.2026, Az. NE-116097, Auftrag 16.09.2026, Besichtigung 24.09.2026: tatsächlich kürzere '
+          + 'Nutzungsdauer 37 Jahre gem. § 7 Abs. 4 S. 2 EStG (Reihenhaus, Baujahr/fiktives Baujahr 1983, '
+          + 'rechtliche Nutzungsdauer 45–50 J.). AfA hier berechnet als Kaufpreis × '
+          + (anteil*100) + ' % Gebäudeanteil ÷ 37 Jahre; Gebäudeanteil GESCHÄTZT, Kaufnebenkosten nicht '
+          + 'enthalten – exakte Bemessungsgrundlage vom Steuerberater bestätigen lassen.';
+        ch=true;
+      } else if(!/NE-116097/.test(String(v.afa_quelle||''))){
+        v.afa_quelle = String(v.afa_quelle||'').trim()
+          + ' | Gutachten-Az. NE-116097, Gutachterin Claudia Fürderer (Zert.-Nr. DIA-IB-930), '
+          + 'Besichtigung 24.09.2026, 37 Jahre RND gem. § 7 Abs. 4 S. 2 EStG, fiktives Baujahr 1983.';
+        ch=true;
+      }
+    }
+  }
+  // === 13.10.2026: Platzhalter-Notizen aus dem Ordnerscan 11.10.2026 durch die geklärten Angaben ersetzen ===
+  // (greift nur, wenn das Cockpit zwischendurch schon geöffnet und der alte Stand gespeichert wurde)
+  {
+    const _upg = (reObj, reAlt) => {
+      const o=(DATA.objekte||[]).find(x=>reObj.test((x.name||'')+' '+(x.adresse||'')+' '+(x.ort||'')));
+      if(!o||!o.notizen||!o.notizen.length) return false;
+      const before=o.notizen.length;
+      o.notizen=o.notizen.filter(n=>!reAlt.test(String(n)));
+      return o.notizen.length!==before;
+    };
+    if(_upg(/ortheide|rehren|auetal/i, /^ACHTUNG: Kündigung Schumacher & Köhler \(Scan, nicht maschinenlesbar\)|^WICHTIG: Kündigung Schumacher & Köhler: Mietende 21\.12\.2026/)) ch=true;
+    if(_upg(/lindenweg/i, /^ACHTUNG: Teilungsentwurf Grundstück Lindenweg 2025 \(Scan, nicht maschinenlesbar\)/)) ch=true;
+  }
+  // === Ordnerscan 18.10.2026: neue Unterlagen aus dem Immobilien-Ordner einarbeiten ===
+  {
+    const _f18 = re => (DATA.objekte||[]).find(o=>re.test((o.name||'')+' '+(o.adresse||'')+' '+(o.ort||'')));
+    const _n18 = (o,key,txt) => {
+      if(!o) return false;
+      o.notizen = o.notizen || [];
+      if(o.notizen.some(n=>String(n).indexOf(key)>=0)) return false;
+      o.notizen.push(txt); return true;
+    };
+    const _e18 = (o,re) => o ? (o.einheiten||[]).find(x=>re.test((x.mieter||'')+' '+(x.bezeichnung||''))) : null;
+
+    // --- Schubertweg 15, 31737 Rinteln: FINALES RND-Gutachten vom 13.10.2026 = 38 Jahre (ersetzt 37) ---
+    const sw18 = _f18(/schubertweg/i);
+    if(sw18){
+      sw18.vermoegen = sw18.vermoegen || {};
+      const v18 = sw18.vermoegen;
+      const q18 = String(v18.afa_quelle||'');
+      if(!/RND38-NE116097/.test(q18) && !/manuell/i.test(q18)){
+        const anteil18 = (v18.gebaeude_anteil!=null ? Number(v18.gebaeude_anteil) : 80)/100;
+        const kp18 = Number(sw18.kaufpreis)||0;
+        if(kp18>0) v18.afa_jahr = Math.round(kp18*anteil18/38);
+        v18.afa_satz = Math.round(100/38*100)/100;
+        v18.afa_quelle = 'RND38-NE116097 | Sachverständigengutachten Claudia Fürderer (Diplom-Sachverständige DIA, '
+          + 'Zert.-Nr. DIA-IB-930, Herzebrock-Clarholz) vom 13.10.2026, Az. NE-116097, Auftrag 16.09.2026, '
+          + 'Besichtigung 24.09.2026, Ermittlungs-/Qualitätsstichtag 01.01.2025: tatsächlich kürzere Nutzungsdauer '
+          + '38 Jahre gem. § 7 Abs. 4 S. 2 EStG (Reihenhaus, fiktives Baujahr 1983, fiktives Gebäudealter 42 J. '
+          + 'bei GND 80 J.). Ersetzt die Vorfassung vom 06.10.2026 (37 Jahre). AfA hier gerechnet als Kaufpreis × '
+          + Math.round(anteil18*100) + ' % Gebäudeanteil ÷ 38 Jahre'
+          + (kp18>0 ? '' : ' – ACHTUNG: im Cockpit ist kein Kaufpreis hinterlegt, der AfA-Betrag konnte daher nicht berechnet werden')
+          + '; Gebäudeanteil GESCHÄTZT, Kaufnebenkosten nicht enthalten – exakte Bemessungsgrundlage vom '
+          + 'Steuerberater bestätigen lassen.';
+        ch=true;
+      }
+      if(_n18(sw18,'RND-Gutachten 13.10.2026 (Endfassung): 38 Jahre',
+        'RND-Gutachten 13.10.2026 (Endfassung): 38 Jahre Restnutzungsdauer gem. § 7 Abs. 4 S. 2 EStG. '
+        + 'Gutachterin Claudia Fürderer (Diplom-Sachverständige DIA, zertifiziert nach DIN EN ISO/IEC 17024, '
+        + 'Zert.-Nr. DIA-IB-930), Az. NE-116097, Auftrag 16.09.2026, Besichtigung 24.09.2026, '
+        + 'Ermittlungs- und Qualitätsstichtag 01.01.2025, 79 Seiten. Ergebnis: wirtschaftliche RND 38 Jahre '
+        + '(ImmoWertV-Modell), technische RND länger, rechtliche RND unkritisch; fiktives Baujahr 1983, '
+        + 'fiktives Gebäudealter 42 Jahre bei GND 80 Jahre. AfA-Satz damit 2,63 %/Jahr statt 2,0 %. '
+        + 'Die bisher im Cockpit hinterlegten 37 Jahre (Fassung 06.10.2026) sind überholt. '
+        + 'WICHTIG: Der Gebäudeanteil am Kaufpreis ist im Cockpit nur geschätzt (Standard 80 %) und das '
+        + 'Gutachten enthält keine Kaufpreisaufteilung – AfA-Bemessungsgrundlage (Gebäudeanteil, '
+        + 'Kaufnebenkosten, Beginn der Abschreibung) vor Einreichung beim Finanzamt vom Steuerberater '
+        + 'bestätigen lassen. Quelle: „Immobilie Schubertweg 15/Restnutzungsdauergutachten Schubertweg/'
+        + '2026-10-13 - NE-116097 - Schubertweg 15, 31737 Rinteln Gutachten Nutzungsdauer.pdf". '
+        + '[Ordnerscan 18.10.2026]')) ch=true;
+    }
+
+    // --- Braustraße 8, 31675 Bückeburg: Erster Nachtrag Gewerbemietvertrag (Überdachung/Kühlkammer) ---
+    const br18 = _f18(/braustr/i);
+    const ab18 = _e18(br18,/ablou/i) || _e18(br18,/gewerbe|gastronomie/i);
+    if(ab18 && !/Nachtrag 1 Überdachung/.test(String(ab18.besonderheiten||''))){
+      ab18.besonderheiten = ('Nachtrag 1 Überdachung (Erster Nachtrag zum Gewerbemietvertrag v. 08.09.2026, '
+        + 'Mieter Hawas Ablou, geb. 12.05.1974): Stellplatzfläche vor dem Treppenaufgang wird für Überdachung '
+        + 'und Kühlkammer überlassen, Nutzungsentgelt 30,00 €/Monat ab 01.11.2026 zusätzlich zu Miete und '
+        + 'NK-Vorauszahlung (NICHT in der Kaltmiete enthalten, von der Staffel ausgenommen, endet mit dem '
+        + 'Mietverhältnis). Zinsloses Darlehen 3.000 € an den Mieter, Rückzahlung in 11 fallenden Raten '
+        + '(01.11.2026: 1.000 €, dann 290 / 270 / 250 / 230 / 210 / 190 / 170 / 150 / 130 / 110 € bis '
+        + '01.09.2027); zahlbar zusätzlich zur Miete, Verwendungszweck „Darlehen Überdachung – Rate x/11“. '
+        + 'Gesamtzahlung damit 2.580 € (11/2026), 1.870 € (12/2026), ab 10/2027 1.620,50 €. Kaution 3.000 € '
+        + 'sichert auch Darlehensraten, Nutzungsentgelt und Rückbaukosten. Strom für Kühlkammer und Aggregat '
+        + 'ausschließlich über den Zähler der Mieteinheit – Anschluss an den Allgemeinstrom ist untersagt. '
+        + String(ab18.besonderheiten||'')).trim();
+      ch=true;
+    }
+    if(_n18(br18,'Erster Nachtrag Gewerbemietvertrag (Überdachung Kühlkammer), Stand 18.10.2026',
+      'ACHTUNG: Erster Nachtrag Gewerbemietvertrag (Überdachung Kühlkammer), Stand 18.10.2026 – im Ordner '
+      + '„GewerblMietvertrag“ liegen ZWEI Fassungen, beide ohne Unterschrift (Signaturfelder leer): '
+      + '(1) „Erster_Nachtrag_Braustrasse8_Ueberdachung.pdf“ (6 Seiten, abgelegt 13.10.2026) – Endfassung: '
+      + 'Nutzungsentgelt 30 €/Mon. ab 01.11.2026, Darlehen 3.000 € in 11 fallenden Raten (1.000 € + 290 bis '
+      + '110 €) vom 01.11.2026 bis 01.09.2027, § 2 Flucht-/Rettungsweg, § 3 TA-Lärm-Grenzwerte '
+      + '(außen 60 dB(A) tags / 45 dB(A) nachts, innen 35/25 dB(A)), § 4 Rückbaupflicht bei behördlicher '
+      + 'Untersagung, § 9 Kaution 3.000 € haftet auch für den Nachtrag. (2) „Nachtrag Darlehen Überdachung '
+      + 'Braustr. 8 .pdf“ (abgelegt 13.10.2026) – ältere Fassung, überholt: Fläche entgeltfrei, Darlehen in '
+      + '12 × 250 € bis 01.10.2027. ACHTUNG: klären und dokumentieren, WELCHE Fassung unterschrieben wurde; '
+      + 'die ältere Fassung sollte aus dem aktiven Ordner genommen werden, sonst gelten zwei widersprüchliche '
+      + 'Tilgungspläne. Offene Punkte vor Auszahlung des Darlehens (Auszahlung erst 7 Tage nach Erfüllung von '
+      + '§ 1 Abs. 2 a und b): Ausführung in Textform abstimmen, Baugenehmigung bzw. Bestätigung der '
+      + 'Genehmigungsfreiheit vorlegen, Datenblatt des Kälteaggregats mit Schallleistungspegel und Aufstellort '
+      + 'vorlegen, Betriebshaftpflicht des Mieters nachweisen; Nachweis der zweckentsprechenden Verwendung und '
+      + 'Fertigstellung binnen 3 Monaten nach Auszahlung. Erfolgt die Auszahlung nach dem 25.10.2026, '
+      + 'verschiebt sich der gesamte Tilgungsplan um die entsprechenden Monate. Die Überdachung wird mit '
+      + 'Errichtung wesentlicher Bestandteil des Grundstücks (§ 94 BGB) und damit Eigentum der eGbR; '
+      + 'Wertersatzansprüche des Mieters sind ausgeschlossen. '
+      + '[Ordnerscan 18.10.2026]')) ch=true;
+    if(_n18(br18,'AWS Braustraße 2026 Änderungsbescheid',
+      'WICHTIG: AWS Braustraße 2026 Änderungsbescheid liegt im Ordner „Nebenkostenabrechnung Rechnungen '
+      + 'Braustraße 8“ (1 Seite, abgelegt 14.10.2026, iPhone-Scan ohne Textlayer – nicht maschinenlesbar). '
+      + 'Nicht auslesbar und manuell nachzutragen: Bescheiddatum, Kassenzeichen/Aktenzeichen, alter und neuer '
+      + 'Gebührenbetrag, Gültigkeit ab welchem Zeitpunkt und Behälter-/Leerungsänderung. Umlagekategorie: '
+      + 'Müllbeseitigung (§ 2 Nr. 8 BetrKV), voll umlagefähig. TEILBETRAG bzw. Änderung einer laufenden '
+      + 'Jahresgebühr – bewusst NICHT als Betrag in die NK-Positionen der Jahresabrechnung eingetragen, '
+      + 'sonst wird die Abrechnung verfälscht. Zu prüfen: ob die geänderte Gebühr eine Anpassung der '
+      + 'NK-Vorauszahlungen rechtfertigt. [Ordnerscan 18.10.2026]')) ch=true;
+
+    // --- Uhlandstraße 28, 32545 Bad Oeynhausen: E.ON-Schlussrechnung Allgemeinstrom (Scan) ---
+    const uh18 = _f18(/uhlandstr/i);
+    if(_n18(uh18,'Schlussrechnung E.ON Allgemeinstrom',
+      'WICHTIG: Schlussrechnung E.ON Allgemeinstrom liegt im Ordner „Rechnungen für Nebenkosten 26“ '
+      + '(„Schlussrechnung eon Uhlandstraße Allgemeinstrom .pdf“, 3 Seiten, abgelegt 13.10.2026, '
+      + 'iPhone-Scan ohne Textlayer – nicht maschinenlesbar). Nicht auslesbar und manuell nachzutragen: '
+      + 'Rechnungsnummer, Rechnungsdatum, Kunden-/Vertragskontonummer, Zählernummer und Endstand, '
+      + 'Abrechnungs-/Leistungszeitraum, Verbrauch in kWh, Netto-/Bruttobetrag und Guthaben oder '
+      + 'Nachzahlung. Umlagekategorie: Allgemeinstrom bzw. Beleuchtung (§ 2 Nr. 11 BetrKV), voll umlagefähig. '
+      + 'TEILBETRAG einer Einzelrechnung – bewusst NICHT als Betrag in die NK-Positionen der Jahresabrechnung '
+      + 'eingetragen. ACHTUNG: Eine Schlussrechnung bedeutet Vertragsende beim Versorger – prüfen, ob für den '
+      + 'Allgemeinstrom ein Nachfolgevertrag läuft oder ob die Lieferung in die Ersatzversorgung des '
+      + 'Grundversorgers gefallen ist, und ob der Zählerstand zur Abrechnung passt. [Ordnerscan 18.10.2026]')) ch=true;
+
+    // --- Luisenstraße 14, Bad Oeynhausen: Blanko-Mietvertrag OG/DG (Vorlage, noch nicht ausgefüllt) ---
+    const lu18 = _f18(/luisenstr/i);
+    if(_n18(lu18,'Blanko-Mietvertrag Wohnung OG/DG, Stand 18.10.2026',
+      'Blanko-Mietvertrag Wohnung OG/DG, Stand 18.10.2026: Vertragsvorlage „Mietverträge/Neu OG/'
+      + 'Mietvertrag_OG_Luisenstr14_Blanko.pdf“ (5 Seiten, erstellt 18.10.2026) für die Wohnung im '
+      + 'Obergeschoss/Dachgeschoss. Vorbelegte Konditionen: Wohnfläche 132 m² (Balkon ca. 4,16 m² und '
+      + 'Dachterrasse ca. 70,04 m² je zu 50 % angerechnet, Berechnung nach WoFlV als Anlage), Grundmiete '
+      + '1.320,00 € (132 m² × 10,00 €/m²), Kfz-Stellplatz 30,00 €, BK-Vorauszahlung 170,00 €, '
+      + 'Heizung/Warmwasser 130,00 € – Gesamtmiete 1.650,00 €/Monat. Vermieterin: Specht & Waschkowski '
+      + 'Immobilien eGbR. WICHTIG: reine Vorlage ohne Mieter, ohne Mietbeginn und ohne Unterschriften – '
+      + 'deshalb bewusst KEINE Miet- oder Mieterdaten an der Einheit hinterlegt. Nach Abschluss nachtragen: '
+      + 'Mieter, Mietbeginn, Kaltmiete, NK/HK, Kaution und Kündigungsverzicht. Das Objekt steht im Cockpit '
+      + 'weiterhin als „im Erwerb“ – Vermietung erst nach Besitzübergang möglich. [Ordnerscan 18.10.2026]')) ch=true;
+  }
+  // === Ordnerscan 19.10.2026: RND-Gutachten + Honorarrechnung Luisenstraße, NK Franz-Liszt-Str. ===
+  {
+    const _f19 = re => (DATA.objekte||[]).find(o=>re.test((o.name||'')+' '+(o.adresse||'')+' '+(o.ort||'')));
+    const _n19 = (o,key,txt) => {
+      if(!o) return false;
+      o.notizen = o.notizen || [];
+      if(o.notizen.some(n=>String(n).indexOf(key)>=0)) return false;
+      o.notizen.push(txt); return true;
+    };
+
+    // --- Luisenstraße 14, 32545 Bad Oeynhausen: RND-Gutachten 16.10.2026 = 27 Jahre ---
+    const lu19 = _f19(/luisenstr/i);
+    if(lu19){
+      lu19.vermoegen = lu19.vermoegen || {};
+      const v19 = lu19.vermoegen;
+      const q19 = String(v19.afa_quelle||'');
+      if(!/RND27-NE118070/.test(q19) && !/manuell/i.test(q19)){
+        const an19 = (v19.gebaeude_anteil!=null ? Number(v19.gebaeude_anteil) : 80)/100;
+        const kp19 = Number(lu19.kaufpreis)||0;
+        if(kp19>0) v19.afa_jahr = Math.round(kp19*an19/27);
+        v19.afa_satz = Math.round(100/27*100)/100;
+        v19.afa_quelle = 'RND27-NE118070 | Sachverständigengutachten Ruth Gierhake (Dipl.-Ing. M.Sc., zertifizierte '
+          + 'Sachverständige für Markt- und Beleihungswertermittlung nach DIN EN ISO/IEC 17024, ZIS Sprengnetter '
+          + 'Zert (WG) 2504-014, Herzebrock-Clarholz) vom 16.10.2026, Az. NE-118070, Auftrag 01.10.2026, '
+          + 'Besichtigung 09.10.2026, Ermittlungs- und Qualitätsstichtag 01.10.2026: tatsächlich kürzere '
+          + 'Nutzungsdauer 27 Jahre gem. § 7 Abs. 4 S. 2 EStG (Mehrfamilienhaus, GND 80 J., mittlerer '
+          + 'Modernisierungsgrad 6 Punkte, fiktives Gebäudealter 53 J., fiktives Baujahr 1973). AfA hier '
+          + 'gerechnet als Kaufpreis × ' + Math.round(an19*100) + ' % Gebäudeanteil ÷ 27 Jahre'
+          + (kp19>0 ? '' : ' – ACHTUNG: im Cockpit ist kein Kaufpreis hinterlegt, der AfA-Betrag konnte daher nicht berechnet werden')
+          + '; Gebäudeanteil GESCHÄTZT, Kaufnebenkosten nicht enthalten. ACHTUNG: Objekt steht im Erwerb – '
+          + 'die AfA beginnt erst mit Übergang von Nutzen und Lasten, im Erwerbsjahr nur zeitanteilig '
+          + '(§ 7 Abs. 1 S. 4 EStG). Bemessungsgrundlage und Beginn vom Steuerberater bestätigen lassen.';
+        ch=true;
+      }
+      if(_n19(lu19,'RND-Gutachten 16.10.2026: 27 Jahre Restnutzungsdauer',
+        'RND-Gutachten 16.10.2026: 27 Jahre Restnutzungsdauer gem. § 7 Abs. 4 S. 2 EStG. Gutachterin '
+        + 'Ruth Gierhake (Dipl.-Ing. M.Sc., zertifiziert nach DIN EN ISO/IEC 17024, ZIS Sprengnetter Zert (WG) '
+        + '2504-014), Az. NE-118070, Auftrag 01.10.2026, Besichtigung 09.10.2026 (Außenbesichtigung), '
+        + 'Stichtag 01.10.2026, 99 Seiten. Herleitung: Mehrfamilienhaus, Gesamtnutzungsdauer 80 Jahre nach '
+        + 'Anlage 1 zu § 12 ImmoWertV, mittlerer Modernisierungsgrad mit 6 Modernisierungspunkten, daraus '
+        + 'modifizierte RND 27 Jahre, fiktives Gebäudealter 53 Jahre, fiktives Baujahr 1973 (tatsächliches '
+        + 'Baujahr 1935). Gutachtenfläche 313 m². AfA-Satz damit 3,70 %/Jahr statt 2,0 % – rund 85 % mehr '
+        + 'Abschreibung pro Jahr. WICHTIG: Der Gebäudeanteil am Kaufpreis ist im Cockpit nur geschätzt '
+        + '(Standard 80 %), das Gutachten enthält keine Kaufpreisaufteilung; Kaufnebenkosten gehören in die '
+        + 'Bemessungsgrundlage. ACHTUNG: Das Objekt steht noch im Erwerb – die AfA läuft erst ab Übergang von '
+        + 'Nutzen und Lasten und im ersten Jahr nur monatsweise anteilig. Quelle: „Restnutzungsdauergutachten/'
+        + '2026-10-16 - NE-118070 - Luisenstraße 14, 32545 Bad Oeynhausen Gutachten Nutzungsdauer.pdf". '
+        + '[Ordnerscan 19.10.2026]')) ch=true;
+      if(_n19(lu19,'Honorarrechnung NR-028230 für das RND-Gutachten',
+        'ACHTUNG: Honorarrechnung NR-028230 für das RND-Gutachten ist offen. Rechnungssteller DIMBEG GmbH '
+        + '(nutzungsdauer.com, Gesamtrechtsnachfolgerin der W. Verwaltung GmbH), Fuhrmannsplatz 11, '
+        + '33442 Herzebrock-Clarholz, AG Gütersloh HRB 13916, USt-IdNr. DE405420463, Geschäftsführer '
+        + 'Sebastian Storfner. Rechnungsdatum und Leistungsdatum 16.10.2026, Auftrag NE-118070, '
+        + 'Bewertungsobjekt Luisenstraße 14, 32545 Bad Oeynhausen (313 qm). Honorar 1.145,00 € netto '
+        + '(inklusive Außenbesichtigung 150,00 €) + 19 % MwSt 217,55 € = 1.362,55 € brutto. Zahlbar innerhalb '
+        + 'von 10 Tagen ab Erhalt ohne Abzug, also fällig um den 26.10.2026 – Zahlung terminieren. '
+        + 'Empfänger: DIMBEG GmbH, IBAN DE68 1001 8000 0202 9877 18, BIC FNOMDEB2. Steuerlich: Gutachtenkosten '
+        + 'für den Nachweis der kürzeren Nutzungsdauer sind nach Einschätzung sofort abzugsfähige '
+        + 'Werbungskosten bzw. Betriebsausgaben und keine Anschaffungsnebenkosten; bei umsatzsteuerfreier '
+        + 'Wohnraumvermietung (§ 4 Nr. 12 a UStG) gibt es keinen Vorsteuerabzug, dann wirkt der Bruttobetrag. '
+        + 'Beides vom Steuerberater bestätigen lassen. Quelle: „Rechnungen/'
+        + 'NR-028230_Luisenstraße 14, 32545 Bad Oeynhausen.pdf". [Ordnerscan 19.10.2026]')) ch=true;
+    }
+
+    // --- Franz-Liszt-Str. 1A, Bad Eilsen: Hausgeldabrechnung 2025 WEG + NK-Abrechnung Steding ---
+    const fl19 = _f19(/liszt|eilsen/i);
+    if(_n19(fl19,'Hausgeldabrechnung 2025 der WEG ZR 27 vom 12.10.2026',
+      'Hausgeldabrechnung 2025 der WEG ZR 27 vom 12.10.2026 liegt vor; daraus wurde am 18.10.2026 die '
+      + 'Betriebskostenabrechnung 2025 für Jan Steding (1. OG rechts, 67,62 m²) erstellt: Nutzungszeitraum '
+      + '01.04.–31.12.2025, Umlage zeitanteilig 275/365. Kalte Betriebskosten der Wohnung 1.198,40 €, '
+      + 'Anteil Steding 902,89 €; Heiz- und Warmwasserkosten lt. ista-Einzelabrechnung 692,65 €; '
+      + 'Gesamtkosten 1.595,54 € minus Vorauszahlungen 9 × 133,00 € = 1.197,00 € ergibt eine NACHZAHLUNG '
+      + 'von 398,54 €, zahlbar bis 30.11.2026, Verwendungszweck „Betriebskosten 2025 Steding“. '
+      + 'Nicht umgelegt: Verwaltergebühr, Bankgebühren, Instandhaltung, Rücklagen und der CO2-Kostenanteil '
+      + 'des Vermieters. WICHTIG: Die beiden Belege im Ordner „Nebenkostenabrechnung Franz-Liszt-Str. 2025“ '
+      + 'sind Scans ohne Textlayer und nicht maschinenlesbar – „Hausgeldabrechnung 2025 Franz-Liszt-Str.pdf“ '
+      + 'und „Einzelabrechnung Energie- und Betriebskosten 2025 Franz-Liszt-Str.pdf“ (beide abgelegt '
+      + '18.10.2026). Daraus nicht auslesbar und bei Bedarf manuell nachzutragen: Gesamtsumme des Hausgelds, '
+      + 'Abrechnungsspitze gegenüber der WEG, Rücklagenzuführung, Instandhaltungsanteil und die '
+      + 'Verbrauchswerte der ista-Abrechnung. Eingang der Nachzahlung zum 30.11.2026 kontrollieren. '
+      + '[Ordnerscan 19.10.2026]')) ch=true;
+  }
+  // === 19.10.2026: Kaufpreisaufteilung Luisenstraße 14 auf 85 % Gebäude / 15 % Grund und Boden ===
+  {
+    const luG = (DATA.objekte||[]).find(o=>/luisenstr/i.test((o.name||'')+' '+(o.adresse||'')+' '+(o.ort||'')));
+    if(luG){
+      luG.vermoegen = luG.vermoegen || {};
+      const vG = luG.vermoegen;
+      if(!/GA85-LUI/.test(String(vG.afa_quelle||''))){
+        vG.gebaeude_anteil = 85;
+        vG.afa_satz = Math.round(100/27*100)/100;
+        const kpG = Number(luG.kaufpreis)||0;
+        if(kpG>0) vG.afa_jahr = Math.round(kpG*0.85/27);
+        vG.afa_quelle = 'GA85-LUI | RND27-NE118070 | Gebäudeanteil 85 % / Grund und Boden 15 % (Entscheidung Christian, 19.10.2026). '
+          + 'Plausibilisierung: Grundstück 499,10 m² (Flurstück 114) laut RND-Gutachten; 15 % von 435.000 € '
+          + 'Kaufpreis = 65.250 € Bodenwert = 130,74 €/m². Der durchschnittliche Bodenrichtwert der PLZ 32545 '
+          + 'liegt bei 104 €/m² (Stichtag 01.01.2026, Spanne 60–700 €/m², bodenrichtwerte-deutschland.de / '
+          + 'BORIS NRW) – nach reiner Bodenwertquote wären es nur 11,9 % Boden, die 15 % sind also bewusst '
+          + 'konservativ angesetzt. WICHTIG: zonengenauen Bodenrichtwert für die Luisenstraße aus BORIS NRW '
+          + 'bzw. vom Gutachterausschuss Minden-Lübbecke als Nachweis zur Akte nehmen; liegt die Zone deutlich '
+          + 'über 130 €/m², ist die 85/15-Aufteilung angreifbar. '
+          + 'AfA-Grundlage: Restnutzungsdauer 27 Jahre aus dem Gutachten Ruth Gierhake vom 16.10.2026, '
+          + 'Az. NE-118070 (MFH, GND 80 J., Modernisierungsgrad 6 Punkte, fiktives Baujahr 1973) = 3,70 %/Jahr. '
+          + 'Der hier angezeigte AfA-Betrag rechnet nur mit dem Kaufpreis OHNE Kaufnebenkosten '
+          + '(52.505 € = 12,07 %). Mit Nebenkosten beträgt die Bemessungsgrundlage 85 % von 487.505 € = '
+          + '414.379 € und die AfA rund 15.347 €/Jahr. ACHTUNG: Objekt im Erwerb – AfA erst ab Übergang von '
+          + 'Nutzen und Lasten, im Erwerbsjahr nur monatsanteilig (§ 7 Abs. 1 S. 4 EStG). Aufteilung im '
+          + 'Kaufvertrag festschreiben und mit Kricheldorf abstimmen.';
+        ch=true;
+      }
+      luG.notizen = luG.notizen || [];
+      if(!luG.notizen.some(n=>String(n).indexOf('Kaufpreisaufteilung 85 % Gebäude / 15 % Grund und Boden')>=0)){
+        luG.notizen.push('WICHTIG: Kaufpreisaufteilung 85 % Gebäude / 15 % Grund und Boden ist im Cockpit gesetzt '
+          + '(19.10.2026), aber noch NICHT im Kaufvertrag vereinbart – im Objektordner liegt kein Notarentwurf. '
+          + 'Die Aufteilung vor dem Notartermin in den Kaufvertrag aufnehmen: eine vertraglich vereinbarte '
+          + 'Aufteilung ist für das Finanzamt bindend, solange sie wirtschaftlich nicht unhaltbar ist '
+          + '(BFH IX R 26/19 vom 21.07.2020 – die BMF-Arbeitshilfe ist nicht bindend). Rechenbasis: Kaufpreis '
+          + '435.000 € + Kaufnebenkosten 52.505 € (12,07 %) = 487.505 €, davon 85 % = 414.379 € Gebäude. '
+          + 'AfA mit 27 Jahren rund 15.347 €/Jahr statt 14.445 €/Jahr bei 80 % – rund 900 €/Jahr mehr AfA, '
+          + 'bei 45 % Steuersatz etwa 406 €/Jahr, über 27 Jahre gut 11.000 €. Die 15-%-Grenze nach '
+          + '§ 6 Abs. 1 Nr. 1a EStG steigt damit auf 62.157 € netto in den ersten drei Jahren nach Übergang '
+          + 'Nutzen/Lasten (bei 80 %: 58.501 €); die geplanten 30.000 € für Fenster und Fassadenanstrich '
+          + 'bleiben klar darunter. Offen: zonengenauer Bodenrichtwert als Nachweis, Abstimmung mit '
+          + 'Steuerberater Kricheldorf, Vertragsklausel durch den Notar. [19.10.2026]');
+        ch=true;
+      }
+    }
+  }
+  // === 19.10.2026: AfA-Sätze auf die Restnutzungsdauer-Gutachten ziehen (Uhlandstr. 28, Lindenweg 2) ===
+  // Luisenstraße 14 (27 J) und Schubertweg 15 (38 J) werden bereits weiter oben gesetzt.
+  {
+    const _fa = re => (DATA.objekte||[]).find(o=>re.test((o.name||'')+' '+(o.adresse||'')+' '+(o.ort||'')));
+    const _setAfa = (o, marker, rnd, quelle) => {
+      if(!o) return false;
+      o.vermoegen = o.vermoegen || {};
+      const v = o.vermoegen;
+      if(new RegExp(marker).test(String(v.afa_quelle||''))) return false;
+      if(/manuell/i.test(String(v.afa_quelle||''))) return false;
+      const anteil = (v.gebaeude_anteil!=null ? Number(v.gebaeude_anteil) : 80)/100;
+      const kp = Number(o.kaufpreis)||0;
+      v.afa_satz = Math.round(100/rnd*100)/100;
+      if(kp>0) v.afa_jahr = Math.round(kp*anteil/rnd);
+      v.afa_quelle = marker + ' | ' + quelle
+        + ' AfA hier gerechnet als Kaufpreis × ' + Math.round(anteil*100) + ' % Gebäudeanteil ÷ ' + rnd
+        + ' Jahre = ' + (Math.round(100/rnd*100)/100).toString().replace('.',',') + ' %/Jahr'
+        + (kp>0 ? '' : ' – ACHTUNG: kein Kaufpreis im Cockpit hinterlegt, AfA-Betrag nicht berechnet')
+        + '. Gebäudeanteil GESCHÄTZT, Kaufnebenkosten nicht in der Bemessungsgrundlage enthalten – '
+        + 'exakte Werte vom Steuerberater bestätigen lassen.';
+      return true;
+    };
+
+    if(_setAfa(_fa(/uhlandstr/i), 'RND18-NG014339', 18,
+      'Sachverständigengutachten vom 22.04.2026, Az. NG-014339: tatsächlich kürzere Nutzungsdauer '
+      + '18 Jahre gem. § 7 Abs. 4 S. 2 EStG, fiktives Baujahr 1964. Quelle: '
+      + '„Uhlandstraße 28/Restnutzungsdauergutachten/2026-04-22 - NG-014339 - ... Gutachten Nutzungsdauer.pdf“ '
+      + '(Zweitablage in „Steuerunterlagen 2026“).')) ch=true;
+
+    if(_setAfa(_fa(/lindenweg/i), 'RND24-LW', 24,
+      'Restnutzungsgutachten vom 30.03.2026: tatsächlich kürzere Nutzungsdauer 24 Jahre gem. '
+      + '§ 7 Abs. 4 S. 2 EStG, fiktives Baujahr 1970. Ersetzt die Vorfassung NG-013824 vom 26.03.2026 '
+      + '(21 Jahre, im Ordner mit „Alt!“ gekennzeichnet). Quelle: „Lindenweg 2, 31675 Bückeburg/'
+      + 'Steuerliche Grundlage Restnutzung/Restnutzungsgutachten Lindenweg 2, 31675 Bückeburg.pdf“.')) ch=true;
+
+    // Hinweis-Notiz zur Umstellung, damit die alten manuell eingetragenen Beträge nachvollziehbar bleiben
+    [[/uhlandstr/i,'Uhlandstraße 28','18 Jahre (Gutachten 22.04.2026, Az. NG-014339)'],
+     [/lindenweg/i,'Lindenweg 2','24 Jahre (Gutachten 30.03.2026; Vorfassung NG-013824 mit 21 Jahren ist überholt)'],
+     [/luisenstr/i,'Luisenstraße 14','27 Jahre (Gutachten 16.10.2026, Az. NE-118070)'],
+     [/schubertweg/i,'Schubertweg 15','38 Jahre (Gutachten 13.10.2026, Az. NE-116097)']
+    ].forEach(([re,label,txt])=>{
+      const o=_fa(re); if(!o) return;
+      o.notizen = o.notizen || [];
+      const key='AfA-Satz aus Gutachten übernommen (19.10.2026)';
+      if(o.notizen.some(n=>String(n).indexOf(key)>=0)) return;
+      o.notizen.push(key+': Restnutzungsdauer '+txt+'. Der AfA-Satz und der AfA-Betrag im Cockpit wurden '
+        + 'aus dem Gutachten neu berechnet und ersetzen den zuvor manuell eingetragenen Wert. '
+        + 'WICHTIG: Die Berechnung nutzt nur den Kaufpreis ohne Kaufnebenkosten und einen geschätzten '
+        + 'Gebäudeanteil – für die Anlage V die Bemessungsgrundlage inklusive Kaufnebenkosten und die '
+        + 'tatsächliche Kaufpreisaufteilung vom Steuerberater bestätigen lassen. Wer den Betrag bewusst '
+        + 'abweichend setzen will, schreibt „manuell“ in das Quellenfeld – dann rühren spätere Läufe '
+        + 'den Wert nicht mehr an.');
+      ch=true;
+    });
+  }
   // Standard-Absender einmalig vorbelegen (in Einstellungen jederzeit änderbar)
   DATA.meta=DATA.meta||{};
   const ab=DATA.meta.absender||{};
