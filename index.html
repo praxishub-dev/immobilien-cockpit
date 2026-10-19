@@ -908,19 +908,31 @@ function migrateData(){
         + 'dem Kaufpreis OHNE Kaufnebenkosten. ACHTUNG: Objekt im Erwerb – AfA erst ab Übergang von Nutzen und '
         + 'Lasten, im Erwerbsjahr nur monatsanteilig (§ 7 Abs. 1 S. 4 EStG). Aufteilung im Kaufvertrag '
         + 'festschreiben und mit Kricheldorf abstimmen.';
-      lu2.notizen = lu2.notizen || [];
-      const k2='ACHTUNG: Kaufpreis Luisenstraße – zwei verschiedene Zahlen im Umlauf';
-      if(!lu2.notizen.some(n=>String(n).indexOf(k2)>=0)){
-        lu2.notizen.push(k2+': Im Cockpit stehen ' + kp2.toLocaleString('de-DE') + ' €, im Immobilien-Rechner '
-          + '(„mit RND Immobilien-Rechner · Specht & Waschkowski.pdf“, erstellt 16.09.2026) stehen 435.000 € '
-          + 'Kaufpreis plus 52.505 € Kaufnebenkosten (12,07 %). Vor dem Notartermin klären, welche Zahl gilt – '
-          + 'davon hängen AfA-Bemessungsgrundlage, die 15-%-Grenze nach § 6 Abs. 1 Nr. 1a EStG und die '
-          + 'Bodenwertquote ab. Frühere Notizen in diesem Objekt, die 435.000 € nennen, stammen aus der '
-          + 'Rechner-Fassung. [19.10.2026]');
-        ch=true;
-      }
       ch=true;
     }
+  }
+  // === 19.10.2026: Kurzlabel fuer die AfA-Anzeige im Vermoegensaufbau ===
+  // Die ausfuehrliche Herleitung bleibt in afa_quelle (dort als Tooltip), angezeigt wird afa_kurz.
+  {
+    const RNDS=[[/RND18-NG014339/,18],[/RND24-LW/,24],[/RND27-NE118070/,27],[/RND38-NE116097/,38]];
+    (DATA.objekte||[]).forEach(o=>{
+      const v=o.vermoegen; if(!v) return;
+      const q=String(v.afa_quelle||'');
+      const hit=RNDS.find(r=>r[0].test(q));
+      const anteil=(v.gebaeude_anteil!=null?Number(v.gebaeude_anteil):80);
+      let kurz;
+      if(hit){
+        const satz=Number(v.afa_satz)||Math.round(100/hit[1]*100)/100;
+        kurz=satz.toFixed(2).replace('.',',')+' % · RND '+hit[1]+' J. (Gutachten) · Gebäude '
+             +anteil+' % / Boden '+(100-anteil)+' %';
+      } else if(Number(v.afa_satz)>0 && Number(o.kaufpreis)>0){
+        const satz=Number(v.afa_satz);
+        kurz=satz.toFixed(2).replace('.',',')+' % · Standard-AfA · Gebäude '+anteil+' % / Boden '+(100-anteil)+' %';
+      } else {
+        kurz=q.slice(0,80);
+      }
+      if(v.afa_kurz!==kurz){ v.afa_kurz=kurz; ch=true; }
+    });
   }
   // Standard-Absender einmalig vorbelegen (in Einstellungen jederzeit änderbar)
   DATA.meta=DATA.meta||{};
@@ -2982,7 +2994,7 @@ function viewVermoegen(){
     const wj=o.kaufpreis?o.kaufpreis*wp/100:null;
     const w10=o.kaufpreis?o.kaufpreis*(Math.pow(1+wp/100,10)-1):null;
     if(aktiv){ nAktiv++; if(afa)sumA+=afa; if(tj)sumT+=tj; if(a10)sumA10+=a10; if(t10)sumT10+=t10; if(wj)sumW+=wj; if(w10)sumW10+=w10; }
-    return `<tr style="${aktiv?'':'opacity:.4'}"><td style="cursor:pointer" data-vmselrow="${o.id}" title="Anklicken = Objekt ${aktiv?'aus der Summe nehmen':'in die Summe aufnehmen'}"><input type="checkbox" data-vmsel="${o.id}" ${aktiv?'checked':''} style="width:auto;margin-right:7px;vertical-align:middle;accent-color:var(--s1)"><b>${esc(o.name)}</b><br><span class="mut" style="margin-left:24px">${esc(v.afa_quelle||'')}</span></td>
+    return `<tr style="${aktiv?'':'opacity:.4'}"><td style="cursor:pointer" data-vmselrow="${o.id}" title="Anklicken = Objekt ${aktiv?'aus der Summe nehmen':'in die Summe aufnehmen'}"><input type="checkbox" data-vmsel="${o.id}" ${aktiv?'checked':''} style="width:auto;margin-right:7px;vertical-align:middle;accent-color:var(--s1)"><b>${esc(o.name)}</b><br><span class="mut" style="margin-left:24px" title="${esc(v.afa_quelle||'')}">${esc(v.afa_kurz||v.afa_quelle||'')}</span></td>
     <td class="num"><input type="number" step="100" style="width:90px;padding:3px 6px;font-size:12px" data-afa="${o.id}" value="${afa??''}" placeholder="AfA €"></td>
     <td class="num">${tj!=null?EUR(Math.round(tj)):'–'}</td>
     <td class="num"><input type="number" step="0.1" style="width:60px;padding:3px 6px;font-size:12px" data-wz="${o.id}" value="${wp}"> %<br><span class="mut">${wj!=null?'≈ '+EUR(Math.round(wj))+'/J.':''}</span></td>
@@ -3925,6 +3937,33 @@ function rcCalc(){
   const steuerRuecklPM=(stErs>0?stErs:stLast)/12;
   return {kp,ek,mq,wf,zi,ti,st,nk,ekKP,darl,ekQ,annPA,annPM,zinsPA,tilgPA,mietM,jnkm,instand,vVorAfA,afaG,afaPA,vNachAfA,stErs,stLast,cfVorStPA,cfPA,cfPM,ekRend,brutto,faktor,qmP,steuerRuecklPM};
 }
+/* 10-Jahres-Projektion: echte Annuitaet (Zins sinkt, Tilgung steigt), Steuer je Jahr neu.
+   Ohne Wertsteigerung und ohne Mietsteigerung - bewusst konservativ. */
+function rcCalc10(years){
+  years = years||10;
+  const C = rcCalc();
+  let rest = C.darl, sumCF=0, sumTilg=0, sumSt=0, sumZins=0;
+  const rows=[];
+  for(let j=1;j<=years;j++){
+    const zins = rest*(C.zi/100);
+    let tilg = C.annPA - zins;
+    if(tilg>rest) tilg=rest;
+    if(tilg<0) tilg=0;
+    const ann = zins + tilg;
+    const stlErg = C.jnkm - zins - C.instand - C.afaPA;
+    const steuer = -stlErg*(C.st/100);
+    const cf = C.jnkm - ann - C.instand + steuer;
+    rest -= tilg;
+    sumCF+=cf; sumTilg+=tilg; sumSt+=steuer; sumZins+=zins;
+    rows.push({j,zins,tilg,rest,stlErg,steuer,cf});
+  }
+  const nutzen = sumCF + sumTilg;
+  const kum = C.ek>0 ? nutzen/C.ek*100 : 0;
+  const f = C.ek>0 ? 1+nutzen/C.ek : 0;
+  const paExakt = (C.ek>0 && f>0);
+  const pa = paExakt ? (Math.pow(f,1/years)-1)*100 : (C.ek>0 ? kum/years : 0);
+  return Object.assign({},C,{years,rows,sumCF,sumTilg,sumSt,sumZins,restEnde:rest,nutzen,kum,pa,paExakt});
+}
 const rcE=n=>(n<0?'−':'+')+Math.abs(Math.round(n)).toLocaleString('de-DE')+' €';
 const rcD=n=>Math.round(n).toLocaleString('de-DE')+' €';
 const rcCol=v=>v>0?'var(--good)':v<0?'var(--bad)':'var(--ink)';
@@ -3988,7 +4027,13 @@ function rcUpdate(){
     `<div style="background:#faf6ec;border:1px solid #e2d5b0;border-radius:8px;padding:10px 12px;margin-top:8px">
     <div style="font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-2)">EK-Rendite p.a. (Cashflow + Tilgung)</div>
     <div class="mono" style="font-size:20px;font-weight:800;color:${C.ekRend>=5?'var(--good)':C.ekRend>=2?'var(--warn)':'var(--bad)'}">${C.ekRend>=0?'+':''}${C.ekRend.toFixed(2)} % ${C.ekRend>=5?'🟢':C.ekRend>=2?'🟡':'🔴'}</div>
-    <div class="mut" style="font-size:11px">${rcD(C.cfPA+C.tilgPA)} Gesamtnutzen · ${rcD(C.ek)} EK</div></div>`;
+    <div class="mut" style="font-size:11px">${rcD(C.cfPA+C.tilgPA)} Gesamtnutzen · ${rcD(C.ek)} EK</div></div>`+
+    (function(){ const P=rcCalc10(10);
+      return `<div style="background:#faf6ec;border:1px solid #e2d5b0;border-radius:8px;padding:10px 12px;margin-top:8px">
+      <div style="font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-2)">EK-Rendite kumuliert · 10 Jahre</div>
+      <div class="mono" style="font-size:20px;font-weight:800;color:${P.kum>=60?'var(--good)':P.kum>=25?'var(--warn)':'var(--bad)'}">${P.kum>=0?'+':''}${P.kum.toFixed(1)} % ${P.kum>=60?'🟢':P.kum>=25?'🟡':'🔴'}</div>
+      <div class="mut" style="font-size:11px">${rcE(P.nutzen)} Vermögenszuwachs · Ø ${P.pa>=0?'+':''}${P.pa.toFixed(2)} % p.a. · ohne Wertsteigerung</div></div>`;
+    })();
   const rechEl=document.getElementById('rcRech');
   if(rechEl) rechEl.innerHTML=
     `<div class="card"><h3 style="color:#8a6d1f">① Finanzierung</h3>`+
@@ -4018,7 +4063,35 @@ function rcUpdate(){
       rcRow('+ Tilgung p.a.',rcE(C.tilgPA),{ind:true,color:'var(--good)'})+
       rcRow('= Gesamtnutzen p.a.',rcE(C.cfPA+C.tilgPA),{bold:true,color:rcCol(C.cfPA+C.tilgPA)})+
       rcRow('÷ Eigenkapital',rcD(C.ek),{ind:true})+
-      rcRow('EK-Rendite p.a.',(C.ekRend>=0?'+':'')+C.ekRend.toFixed(2)+' %',{gold:true,sep:true})+`</div>`;
+      rcRow('EK-Rendite p.a.',(C.ekRend>=0?'+':'')+C.ekRend.toFixed(2)+' %',{gold:true,sep:true})+`</div>`+
+    (function(){
+      const P=rcCalc10(10);
+      const jahre = P.rows.map(r=>`<tr>
+        <td style="padding:2px 6px 2px 0">${r.j}</td>
+        <td class="mono" style="padding:2px 6px;text-align:right;color:var(--bad)">${rcD(r.zins)}</td>
+        <td class="mono" style="padding:2px 6px;text-align:right;color:var(--good)">${rcD(r.tilg)}</td>
+        <td class="mono" style="padding:2px 6px;text-align:right;color:${rcCol(r.cf)}">${rcE(r.cf)}</td>
+        <td class="mono" style="padding:2px 0 2px 6px;text-align:right">${rcD(r.rest)}</td></tr>`).join('');
+      return `<div class="card"><h3 style="color:#8a6d1f">⑤ EK-Rendite kumuliert (10 Jahre)</h3>`+
+      rcRow('Cashflow nach Steuern, 10 J.',rcE(P.sumCF),{color:rcCol(P.sumCF)})+
+      rcRow('+ Tilgung, 10 J.',rcE(P.sumTilg),{ind:true,color:'var(--good)'})+
+      rcRow('= Vermögenszuwachs 10 J.',rcE(P.nutzen),{bold:true,color:rcCol(P.nutzen)})+
+      rcRow('÷ Eigenkapital',rcD(P.ek),{ind:true})+
+      rcRow('EK-Rendite kumuliert (10 J.)',(P.kum>=0?'+':'')+P.kum.toFixed(1)+' %',{gold:true,sep:true})+
+      rcRow('Ø p.a. (Zinseszins)'+(P.paExakt?'':' – näherungsweise'),(P.pa>=0?'+':'')+P.pa.toFixed(2)+' %',{bold:true,color:rcCol(P.pa)})+
+      rcRow('davon Steuerwirkung, 10 J.',rcE(P.sumSt),{color:rcCol(P.sumSt)})+
+      rcRow('gezahlte Zinsen, 10 J.',rcE(-P.sumZins),{color:'var(--bad)'})+
+      rcRow('Restschuld nach 10 J.',rcD(P.restEnde),{bold:true,sep:true})+
+      `<table style="width:100%;border-collapse:collapse;font-size:11px;margin-top:10px">
+        <thead><tr style="color:var(--ink-2);text-align:left;border-bottom:1px solid var(--border)">
+        <th style="padding:3px 6px 3px 0;font-weight:600">J.</th>
+        <th style="padding:3px 6px;text-align:right;font-weight:600">Zins</th>
+        <th style="padding:3px 6px;text-align:right;font-weight:600">Tilgung</th>
+        <th style="padding:3px 6px;text-align:right;font-weight:600">CF n. St.</th>
+        <th style="padding:3px 0 3px 6px;text-align:right;font-weight:600">Restschuld</th></tr></thead>
+        <tbody>${jahre}</tbody></table>
+      <p class="note" style="margin-top:8px">Annuität konstant, Zinsanteil sinkt jährlich. OHNE Wertsteigerung und OHNE Mietsteigerung gerechnet – bewusst konservativ. Die Zinsbindung endet meist vor Jahr 10: ab dann gilt der Anschlusszins, nicht ${C.zi.toFixed(1)} %. Keine Steuerberatung.</p></div>`;
+    })();
   const bewEl=document.getElementById('rcBew');
   if(bewEl){
     const qmA=C.qmP<=2200?'good':C.qmP<=2800?'warn':'bad';
